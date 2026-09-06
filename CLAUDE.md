@@ -94,19 +94,24 @@ compare against. `todo.md` holds the wishlist, including the Gaussian splat view
 
 ## Commands
 
-Everything large lives in `data/` (gitignored): `data/nuscenes` is the extracted
-split, `data/models` the Depth Anything checkpoint, `data/cache` the computed
-depth predictions. `make data` fetches all of it from the GitHub release listed
-in `data.manifest`. `make data-bundle` rebuilds that bundle from a local `data/`.
+Everything large lives in `data/` (gitignored) in three bundles that
+`data.manifest` lists and `scripts/sync_data.sh` fetches from GitHub releases:
+`dataset` (`data/nuscenes`, required), `depth` (Depth Anything V2 checkpoint,
+`data/cache/depth`, `data/cache/fusion`) and `splat` (DA3 checkpoint,
+`data/cache/splat`). `/api/bundles` reports which are installed and the UI
+locks the views whose bundle is missing. `make data-bundle TAG=… BUNDLES=…`
+rebuilds bundles from a local `data/`.
 
+- `make data`, `make data-depth`, `make data-splat`, `make data-all` fetch the
+  bundles.
 - `make setup` installs Python deps with uv and npm deps.
 - `make backend` and `make frontend` run the two dev servers. Open
   http://localhost:5173.
 - `make demo` builds the UI and serves everything from http://localhost:8000.
 - `make depth-cache` runs Depth Anything over every keyframe camera image and
   the per-scene summaries, about eight minutes on an Apple GPU.
-- `make splat-setup` installs the Depth Anything 3 environment and downloads
-  its 6.8 GB checkpoint. Only needed for the Gaussian splat view.
+- `make splat-setup` fetches the splat bundle and installs the Depth Anything 3
+  environment. Only needed to build new splats.
 - `make check` type-checks the frontend. There are no automated tests yet.
 
 Take screenshots with puppeteer-core driving the installed Chrome when the

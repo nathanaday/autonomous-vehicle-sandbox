@@ -35,6 +35,9 @@ FUSION_CACHE = Path(os.environ.get("FUSION_CACHE", DATA / "cache" / "fusion"))
 SPLAT_CACHE = Path(os.environ.get("SPLAT_CACHE", DATA / "cache" / "splat"))
 DA3_MODEL_DIR = Path(os.environ.get("DA3_MODEL_DIR", DATA / "models" / "da3" / "DA3NESTED-GIANT-LARGE-1.1"))
 
+if not (DATAROOT / "v1.0-mini" / "scene.json").exists():
+    raise SystemExit(f"nuScenes v1.0-mini not found at {DATAROOT}. Run 'make data' first; see README, Data.")
+
 nusc = NuScenes(DATAROOT)
 depth_model = DepthEstimator(DEPTH_CHECKPOINT, DEPTH_CACHE)
 fusion = FusionBuilder(nusc, depth_model, FUSION_CACHE)
@@ -47,6 +50,17 @@ def _get(table: str, token: str) -> dict:
         return nusc.get(table, token)
     except KeyError:
         raise HTTPException(404, f"no {table} with token {token}")
+
+
+@app.get("/api/bundles")
+def bundles():
+    """Which data bundles are installed, and the views each one unlocks. The
+    dataset bundle is required to start; the other two are optional."""
+    return {
+        "dataset": {"present": True, "views": ["explore"], "path": str(DATAROOT), "make": "make data"},
+        "depth": {"present": depth_model.available, "views": ["depth", "fusion"], "path": str(DEPTH_CHECKPOINT), "make": "make data-depth"},
+        "splat": {"present": splats.available, "views": ["splat"], "path": str(DA3_MODEL_DIR), "make": "make data-splat"},
+    }
 
 
 @app.get("/api/scenes")

@@ -1,7 +1,16 @@
-# Data bundle for autonomous-vehicle-sandbox. Read by scripts/sync_data.sh.
-# Regenerate with scripts/bundle_data.sh; edit url_base if the release moves.
-url_base https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v1
-archive av-sandbox-data.tar.gz 4c622233cc7bb86e2ad077342dd2a7d06d090c66756d484d94fd14f2cd1f85eb 4978652224
-part av-sandbox-data.tar.gz.part-aa c1d7d51a50d880b22d030afc674733515b2b59fa41c2c9167a5060b9ec7c280d 1992294400
-part av-sandbox-data.tar.gz.part-ab 06cd6125f705a18a0c8a3849cd62fd2d064fe17e166c24a26072b43451ea5911 1992294400
-part av-sandbox-data.tar.gz.part-ac 76dbb0210b08322a9d1a56b53af8b4c5e53a75dff078b94423b49b1085700ea5 994063424
+# Data bundles for autonomous-vehicle-sandbox. Read by scripts/sync_data.sh.
+# Regenerate a bundle with scripts/bundle_data.sh <tag> <bundle>.
+# bundle <name> <archive> <sha256> <bytes> <release url>
+# part <name> <file> <sha256> <bytes>
+bundle dataset av-sandbox-dataset.tar.gz ca9f5ec3f7336cf25290314124c4910c82aea8ec041ad8eaa10c7d0ffb1d3e40 4333345697 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part dataset av-sandbox-dataset.tar.gz.part-aa 9bb7b2a537a137edec11571b6a5b655158b764794baef0dc7c48c24a97f5c528 1992294400
+part dataset av-sandbox-dataset.tar.gz.part-ab 06cd6125f705a18a0c8a3849cd62fd2d064fe17e166c24a26072b43451ea5911 1992294400
+part dataset av-sandbox-dataset.tar.gz.part-ac 2826e532d8fd22c34d48fb2d5a51ff6954a3aa4f56c77e608c2b50952710024d 348756897
+bundle depth av-sandbox-depth.tar.gz 57c29f1548db2dff3e967343342b1f851540ced731704a3b2fa39e5a9465694e 724139580 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part depth av-sandbox-depth.tar.gz.part-aa 57c29f1548db2dff3e967343342b1f851540ced731704a3b2fa39e5a9465694e 724139580
+bundle splat av-sandbox-splat.tar.gz 7d4259d031e9ddcabf8df0024f21a5bca6425ffd9112e310849dd43371ab72f6 8931998782 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part splat av-sandbox-splat.tar.gz.part-aa 4cd26a0a75693afe9548e908dc5251b0ee0b8fb8b9c57f545f5f7bcc60a36002 1992294400
+part splat av-sandbox-splat.tar.gz.part-ab 93bf827140408bbba4fdb54b6c2893726eeda2d1fd0a1ae5551a4959702a1c89 1992294400
+part splat av-sandbox-splat.tar.gz.part-ac 604717a05445e685a0377cf25b980f23d89797c3ef756932abfb613f8783982a 1992294400
+part splat av-sandbox-splat.tar.gz.part-ad 95b81db847617a449010c2cefed385dc7c644d5bbeb4de582120f4f505ba592a 1992294400
+part splat av-sandbox-splat.tar.gz.part-ae 0bc9b79e2850e7917567571332d7074c7d9d86557443b6259128819530f51496 962821182

@@ -204,7 +204,13 @@ class SplatBuilder:
             self._refresh(job)
             job["seconds"] = round(time.time() - job["started"], 1)
             job["current"] = None
-            built = sum((self.cache_dir / f"{k}.json").exists() for k in job["keys"])
+            built = 0
+            for k in job["keys"]:
+                if (self.cache_dir / f"{k}.json").exists():
+                    built += 1
+                else:  # a stopped exporter can leave a half-written keyframe behind
+                    for ext in ("ply", "npz"):
+                        (self.cache_dir / f"{k}.{ext}").unlink(missing_ok=True)
             job["index"] = built
             if job["state"] == "cancelling":
                 job["state"] = "cancelled"

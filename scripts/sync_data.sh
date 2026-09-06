@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Download the data bundle from GitHub releases, verify it, and extract it
-# into data/. Safe to rerun: finished downloads are resumed or skipped.
+# Download data bundles from GitHub releases, verify them, and extract them
+# into data/. Safe to rerun: finished downloads are resumed or skipped, and a
+# bundle already on disk is left alone.
 #
-#   scripts/sync_data.sh            # download, verify, extract
-#   KEEP_PARTS=1 scripts/sync_data.sh   # keep the downloaded parts afterwards
+#   scripts/sync_data.sh                  # the dataset bundle, required
+#   scripts/sync_data.sh depth splat      # the optional bundles
+#   KEEP_PARTS=1 scripts/sync_data.sh     # keep the downloaded parts afterwards
 #
-# Needs curl and shasum (macOS) or sha256sum (Linux). About 4.6 GB download
-# and 6 GB extracted; keep 11 GB free while it runs.
+# Bundles, from data.manifest: dataset (nuScenes v1.0-mini), depth (Depth
+# Anything V2 checkpoint, depth and fusion caches), splat (Depth Anything 3
+# checkpoint, splat cache). Needs curl and shasum (macOS) or sha256sum (Linux),
+# and free disk of about twice a bundle's size while it extracts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,64 +24,77 @@ if command -v shasum >/dev/null; then sha() { shasum -a 256 "$1" | cut -d' ' -f1
 elif command -v sha256sum >/dev/null; then sha() { sha256sum "$1" | cut -d' ' -f1; }
 else echo "shasum or sha256sum is required" >&2; exit 1; fi
 
-url_base=""; archive=""; archive_sha=""; archive_size=""
-parts=(); part_shas=()
-while read -r key a b c; do
-  case "$key" in
-    url_base) url_base="$a" ;;
-    archive) archive="$a"; archive_sha="$b"; archive_size="$c" ;;
-    part) parts+=("$a"); part_shas+=("$b") ;;
+# A file whose presence means the bundle is installed.
+marker() {
+  case "$1" in
+    dataset) echo "nuscenes/v1.0-mini/scene.json" ;;
+    depth) echo "models/depth-anything-v2/depth_anything_v2_vitb.pth" ;;
+    splat) echo "models/da3/DA3NESTED-GIANT-LARGE-1.1/model.safetensors" ;;
+    *) echo "unknown bundle '$1'; choose from dataset, depth, splat" >&2; exit 1 ;;
   esac
-done < <(grep -v '^#' "$MANIFEST")
-[ -n "$url_base" ] && [ ${#parts[@]} -gt 0 ] || { echo "data.manifest is incomplete" >&2; exit 1; }
+}
 
-if [ -f "$DATA/nuscenes/v1.0-mini/scene.json" ] && [ -d "$DATA/models" ] && [ -d "$DATA/cache" ]; then
-  echo "data/ already contains the dataset, model and cache. Nothing to do."
-  echo "Delete data/nuscenes, data/models or data/cache to force a fresh sync."
-  exit 0
-fi
+manifest_lines() { grep -v '^#' "$MANIFEST" | awk -v k="$1" -v b="$2" '$1 == k && $2 == b'; }
 
-mkdir -p "$DL"
-echo "Downloading ${#parts[@]} parts from $url_base"
-for i in "${!parts[@]}"; do
-  name="${parts[$i]}"; want="${part_shas[$i]}"; dest="$DL/$name"
-  if [ -f "$dest" ] && [ "$(sha "$dest")" = "$want" ]; then
-    echo "  $name  already downloaded and verified"
-    continue
+sync_bundle() {
+  local bundle="$1"
+  local mark; mark="$(marker "$bundle")"
+  if [ -e "$DATA/$mark" ]; then
+    echo "$bundle: already installed (data/$mark exists)"
+    return
   fi
-  echo "  $name"
-  curl -L --fail --retry 5 --retry-delay 3 -C - -o "$dest" "$url_base/$name" || {
-    # curl exits 33 when a completed file cannot be resumed; treat as done and verify below
-    [ -f "$dest" ] || exit 1
-  }
-  got="$(sha "$dest")"
-  if [ "$got" != "$want" ]; then
-    echo "checksum mismatch for $name" >&2
-    echo "  expected $want" >&2
-    echo "  got      $got" >&2
-    echo "Delete $dest and rerun." >&2
+  local archive archive_sha archive_size url_base
+  read -r _ _ archive archive_sha archive_size url_base < <(manifest_lines bundle "$bundle")
+  [ -n "${archive:-}" ] || { echo "$bundle: not in data.manifest" >&2; exit 1; }
+  local parts=() part_shas=()
+  while read -r _ _ name want _; do parts+=("$name"); part_shas+=("$want"); done < <(manifest_lines part "$bundle")
+  [ ${#parts[@]} -gt 0 ] || { echo "$bundle: no parts in data.manifest" >&2; exit 1; }
+
+  mkdir -p "$DL"
+  echo "$bundle: downloading ${#parts[@]} parts from $url_base"
+  local i name want dest got
+  for i in "${!parts[@]}"; do
+    name="${parts[$i]}"; want="${part_shas[$i]}"; dest="$DL/$name"
+    if [ -f "$dest" ] && [ "$(sha "$dest")" = "$want" ]; then
+      echo "  $name  already downloaded and verified"
+      continue
+    fi
+    echo "  $name"
+    curl -L --fail --retry 5 --retry-delay 3 -C - -o "$dest" "$url_base/$name" || {
+      # curl exits 33 when a completed file cannot be resumed; treat as done and verify below
+      [ -f "$dest" ] || exit 1
+    }
+    got="$(sha "$dest")"
+    if [ "$got" != "$want" ]; then
+      echo "checksum mismatch for $name" >&2
+      echo "  expected $want" >&2
+      echo "  got      $got" >&2
+      echo "Delete $dest and rerun." >&2
+      exit 1
+    fi
+  done
+
+  echo "$bundle: joining and verifying the archive ($archive_size bytes) ..."
+  local joined="$DL/$archive"
+  cat "${parts[@]/#/$DL/}" > "$joined"
+  got="$(sha "$joined")"
+  if [ "$got" != "$archive_sha" ]; then
+    echo "archive checksum mismatch: expected $archive_sha, got $got" >&2
+    rm -f "$joined"
     exit 1
   fi
-done
 
-echo "Joining and verifying the archive ($archive_size bytes) ..."
-joined="$DL/$archive"
-cat "${parts[@]/#/$DL/}" > "$joined"
-got="$(sha "$joined")"
-if [ "$got" != "$archive_sha" ]; then
-  echo "archive checksum mismatch: expected $archive_sha, got $got" >&2
+  echo "$bundle: extracting into data/ ..."
+  mkdir -p "$DATA"
+  tar -xzf "$joined" -C "$DATA"
   rm -f "$joined"
-  exit 1
-fi
+  if [ -z "${KEEP_PARTS:-}" ]; then rm -f "${parts[@]/#/$DL/}"; fi
+  [ -e "$DATA/$mark" ] || { echo "$bundle: extraction is incomplete, data/$mark is missing" >&2; exit 1; }
+  echo "$bundle: ok, data/$mark"
+}
 
-echo "Extracting into data/ ..."
-tar -xzf "$joined" -C "$DATA"
-rm -f "$joined"
-if [ -z "${KEEP_PARTS:-}" ]; then rm -f "${parts[@]/#/$DL/}"; fi
-
-ok=1
-for path in nuscenes/v1.0-mini/scene.json nuscenes/samples/CAM_FRONT models/depth-anything-v2 cache/depth; do
-  if [ -e "$DATA/$path" ]; then echo "  ok  data/$path"; else echo "  missing  data/$path" >&2; ok=0; fi
-done
-[ "$ok" = 1 ] || { echo "extraction is incomplete" >&2; exit 1; }
-echo "Done. Run 'make backend' and 'make frontend', or 'make demo'."
+bundles=("$@")
+[ ${#bundles[@]} -gt 0 ] || bundles=(dataset)
+for b in "${bundles[@]}"; do marker "$b" >/dev/null; done
+for b in "${bundles[@]}"; do sync_bundle "$b"; done
+echo "Done. Restart the backend if it is running, or run 'make backend' and 'make frontend', or 'make demo'."

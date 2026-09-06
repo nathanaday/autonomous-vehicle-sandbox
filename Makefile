@@ -1,26 +1,37 @@
-# Data: `make data` downloads the 4.6 GB bundle and extracts it into data/ (see README).
+# Data: `make data` downloads the 5 GB dataset bundle into data/ (see README).
+# `make data-depth` and `make data-splat` add the optional bundles that unlock
+# the Depth Anything, fused mesh and Gaussian splat views.
 # Development: run `make backend` and `make frontend` in two terminals,
 # then open http://localhost:5173.
 # Demo: `make demo` builds the UI and serves everything from one process
 # at http://localhost:8000.
 
-.PHONY: setup data data-bundle splat-setup backend frontend build demo check depth-cache
+.PHONY: setup data data-depth data-splat data-all data-bundle splat-setup backend frontend build demo check depth-cache
 
 setup:
 	cd backend && uv sync
 	cd frontend && npm install
 
 data:
-	scripts/sync_data.sh
+	scripts/sync_data.sh dataset
 
+data-depth:
+	scripts/sync_data.sh depth
+
+data-splat:
+	scripts/sync_data.sh splat
+
+data-all:
+	scripts/sync_data.sh dataset depth splat
+
+# Pack data/ for a release: make data-bundle TAG=data-v3 BUNDLES="depth splat"
 data-bundle:
-	scripts/bundle_data.sh $(TAG)
+	scripts/bundle_data.sh $(TAG) $(BUNDLES)
 
-# Optional: the Gaussian splat view. Installs Depth Anything 3 in its own
-# environment and downloads its 6.8 GB checkpoint into data/models/da3.
-splat-setup:
+# The splat bundle plus the Depth Anything 3 environment for building new
+# splats. Viewing cached splats needs only the bundle.
+splat-setup: data-splat
 	cd tools/da3 && uv sync
-	scripts/fetch_da3.sh
 
 backend:
 	cd backend && uv run uvicorn app.main:app --reload --port 8000

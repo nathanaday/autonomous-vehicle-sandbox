@@ -143,10 +143,12 @@ positions disagreed with its depth map by a factor of 1.4 to 2.5, so the
 exporter keeps the model's rays, colors, opacities and shapes but places every
 Gaussian on the metric depth map along calibrated rays.
 
-Setup for this view is separate because Depth Anything 3 pins `numpy<2`:
+The view needs the `splat` bundle, and building new splats needs the Depth
+Anything 3 environment, which is separate because DA3 pins `numpy<2`:
 
 ```sh
-make splat-setup    # its own uv environment under tools/da3, plus a 6.8 GB checkpoint
+make data-splat     # the checkpoint and cached splats, about 9 GB; enough to view them
+make splat-setup    # the bundle plus its own uv environment under tools/da3, to build more
 ```
 
 Splats are built on request, never by stepping or playing through keyframes.
@@ -156,9 +158,9 @@ keyframe on the Apple GPU, with progress in the panel and on the timeline. The
 backend runs one build at a time and refuses a second one while it runs.
 Results cache under `data/cache/splat` as 40 MB PLY files that any 3DGS viewer
 can open, and once a scene is built, playback shows the splat of each keyframe
-from the cache. Without the checkpoint the other three views work and this one
-reports the missing file. The checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
-the DA3 code installed by pip are Apache 2.0.
+from the cache. Without the bundle the other views work and this one is
+locked. The checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code
+and the DA3 code installed by pip are Apache 2.0.
 
 ## Setup
 
@@ -167,56 +169,72 @@ Requires Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), and Node
 
 ```sh
 make setup      # Python deps with uv, npm deps
-make data       # 4.6 GB download from the GitHub release, 6 GB extracted into data/
+make data       # the nuScenes v1.0-mini dataset, 5 GB, unlocks the Sensors view
+```
+
+The other views need more data. Each is a separate download so a look at the
+dataset costs 5 GB, not 20:
+
+```sh
+make data-depth   # Depth Anything V2 checkpoint and caches, about 1 GB: Depth Anything and Fused mesh views
+make data-splat   # Depth Anything 3 checkpoint and cached splats, about 9 GB: Gaussian splat view
 ```
 
 ## Data
 
-Everything large lives in `data/`, which git ignores:
+Everything large lives in `data/`, which git ignores, in three bundles. The
+backend reports which are installed at `/api/bundles`, and the UI locks the
+views whose bundle is missing and shows the command that fetches it.
 
-| Path | Contents | Size |
-|---|---|---|
-| `data/nuscenes/` | The extracted nuScenes `v1.0-mini` split | 5.1 GB |
-| `data/models/depth-anything-v2/` | `depth_anything_v2_vitb.pth` | 372 MB |
-| `data/cache/depth/` | Depth Anything output for every keyframe camera image, plus per-scene summaries | 559 MB |
-| `data/models/da3/` | Depth Anything 3 checkpoint for the splat view, fetched by `make splat-setup`, not in the bundle | 6.8 GB |
-| `data/cache/fusion/`, `data/cache/splat/` | Meshes and splats built on request, not in the bundle | grows |
+| Bundle | Path | Contents | Size | Unlocks |
+|---|---|---|---|---|
+| `dataset` | `data/nuscenes/` | The extracted nuScenes `v1.0-mini` split | 5.1 GB | Sensors |
+| `depth` | `data/models/depth-anything-v2/`, `data/cache/depth/`, `data/cache/fusion/` | `depth_anything_v2_vitb.pth`, Depth Anything output for every keyframe camera image with per-scene summaries, fused meshes | 1.0 GB | Depth Anything, Fused mesh |
+| `splat` | `data/models/da3/`, `data/cache/splat/` | Depth Anything 3 checkpoint, splats of scenes 0061 and 0103 | 9.4 GB | Gaussian splat |
 
-All three are packaged as one bundle on the repository's
-[releases page](https://github.com/nathanaday/autonomous-vehicle-sandbox/releases),
-split into parts under 2 GB. `data.manifest` at the repository root records the
-release URL and a SHA-256 for every part and for the joined archive.
+The `dataset` bundle is required; the backend refuses to start without it.
+The fused mesh view can also build from lidar alone, but it lives behind the
+`depth` bundle because its camera source and its cache come from Depth
+Anything. New fusion meshes and splats build on request and grow the caches.
 
-**Option 1, the script.** `make data` runs `scripts/sync_data.sh`, which
-downloads the parts listed in `data.manifest`, verifies each checksum, joins
-and verifies the archive, extracts it into `data/`, and checks that the
-expected folders exist. It resumes interrupted downloads and does nothing if
-`data/` is already complete. It needs `curl` and `shasum` or `sha256sum`, and
-about 11 GB of free disk while it runs.
+The bundles are split into parts under 2 GB on the repository's
+[releases page](https://github.com/nathanaday/autonomous-vehicle-sandbox/releases).
+`data.manifest` at the repository root records, for each bundle, the release
+URL and a SHA-256 for every part and for the joined archive.
 
-**Option 2, by hand.** Download every `av-sandbox-data.tar.gz.part-*` file
-from the release, then:
+**Option 1, the script.** `make data`, `make data-depth` and `make data-splat`
+run `scripts/sync_data.sh` for one bundle; `make data-all` fetches all three.
+The script downloads the parts listed in `data.manifest`, verifies each
+checksum, joins and verifies the archive, extracts it into `data/`, and checks
+that the bundle's marker file exists. It resumes interrupted downloads and
+skips a bundle that is already installed. It needs `curl` and `shasum` or
+`sha256sum`, and free disk of about twice the bundle's size while it extracts.
+
+**Option 2, by hand.** Download every `av-sandbox-<bundle>.tar.gz.part-*`
+file from the release, then:
 
 ```sh
-cat av-sandbox-data.tar.gz.part-* > av-sandbox-data.tar.gz
-shasum -a 256 av-sandbox-data.tar.gz     # compare with the archive line in data.manifest
-mkdir -p data && tar -xzf av-sandbox-data.tar.gz -C data
+cat av-sandbox-dataset.tar.gz.part-* > av-sandbox-dataset.tar.gz
+shasum -a 256 av-sandbox-dataset.tar.gz     # compare with the bundle line in data.manifest
+mkdir -p data && tar -xzf av-sandbox-dataset.tar.gz -C data
 ```
 
 **Option 3, from the sources.** Download `v1.0-mini.tar` from
 <https://www.nuscenes.org/nuscenes#download> and extract it so that
 `data/nuscenes/v1.0-mini/scene.json` exists. Download the Depth Anything V2
 ViT-B checkpoint from its Hugging Face release into
-`data/models/depth-anything-v2/`. Then run `make depth-cache` to compute the
-depth cache, about eight minutes on an Apple GPU. Without the checkpoint the
-Sensors view still works and the Depth Anything view reports the missing file.
+`data/models/depth-anything-v2/`, then run `make depth-cache` to compute the
+depth cache, about eight minutes on an Apple GPU. `scripts/fetch_da3.sh`
+downloads the Depth Anything 3 checkpoint from Hugging Face; splats then build
+from the view.
 
-To publish a new bundle after changing `data/`, run `make data-bundle
-TAG=data-v2`, upload the files it writes to `data/bundle/` to a release with
-that tag, and commit the updated `data.manifest`.
+To publish a bundle after changing its part of `data/`, run `make data-bundle
+TAG=data-v3 BUNDLES=splat`, upload the files it writes to `data/bundle/splat/`
+to a release with that tag, and commit the updated `data.manifest`. Bundles
+not rebuilt keep their lines and their release URL.
 
-`NUSCENES_DATAROOT`, `DEPTH_ANYTHING_CHECKPOINT` and `DEPTH_CACHE` override
-the three locations.
+`NUSCENES_DATAROOT`, `DEPTH_ANYTHING_CHECKPOINT`, `DEPTH_CACHE`,
+`FUSION_CACHE`, `SPLAT_CACHE` and `DA3_MODEL_DIR` override the locations.
 
 ## Run
 

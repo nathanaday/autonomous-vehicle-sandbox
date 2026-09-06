@@ -1,5 +1,5 @@
 import { reactive, shallowRef, watch } from 'vue'
-import { api, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
+import { api, type BundleInfo, type BundleName, type Bundles, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
 export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat'
@@ -69,6 +69,20 @@ export const state = reactive({
   depthError: null as string | null,
   loadingSplat: false,
 })
+
+/** Data bundles on the backend's disk; null until loaded. */
+export const bundles = shallowRef<Bundles | null>(null)
+
+/** The missing bundle that locks a view, or null when the view is available. */
+export function viewLock(view: ViewMode): (BundleInfo & { name: BundleName }) | null {
+  const b = bundles.value
+  if (!b) return null
+  for (const name of Object.keys(b) as BundleName[]) {
+    const info = b[name]
+    if (!info.present && info.views.includes(view)) return { ...info, name }
+  }
+  return null
+}
 
 /** Current frame. shallowRef because the typed arrays are large and never mutate. */
 export const frame = shallowRef<Frame | null>(null)
@@ -336,11 +350,13 @@ function writeHash() {
 watch([frame, () => state.lightboxCamera, () => state.view], writeHash)
 
 export async function loadScenes() {
-  state.scenes = await api.scenes()
+  const [scenes, b] = await Promise.all([api.scenes(), api.bundles()])
+  state.scenes = scenes
+  bundles.value = b
   if (!state.scenes.length || state.scene) return
   const h = readHash()
   const scene = state.scenes.find((s) => s.name === h.name) ?? state.scenes[0]
-  state.view = h.view
+  state.view = viewLock(h.view) ? 'explore' : h.view
   state.lightboxCamera = h.view === 'explore' ? h.cam : null
   await loadScene(scene.token, h.index)
 }

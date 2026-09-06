@@ -274,6 +274,17 @@ export interface SceneSplatStatus {
   job: SplatJob | null
 }
 
+/** The data bundles the backend found on disk. Each unlocks views; a view
+ *  whose bundle is missing shows how to fetch it instead of its content. */
+export type BundleName = 'dataset' | 'depth' | 'splat'
+export interface BundleInfo {
+  present: boolean
+  views: string[]
+  path: string
+  make: string
+}
+export type Bundles = Record<BundleName, BundleInfo>
+
 export const DEPTH_CLOUD_STRIDE = 7
 export const DEPTH_LIDAR_STRIDE = 5
 
@@ -299,6 +310,7 @@ async function getFloat32(url: string): Promise<Float32Array> {
 }
 
 export const api = {
+  bundles: () => getJson<Bundles>('/api/bundles'),
   scenes: () => getJson<SceneSummary[]>('/api/scenes'),
   scene: (token: string) => getJson<SceneDetail>(`/api/scenes/${token}`),
   async frame(token: string): Promise<Frame> {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatLocation } from '../geometry'
-import { state, type ViewMode } from '../state'
+import { state, viewLock, type ViewMode } from '../state'
 
 const scene = computed(() => state.scene)
 const date = computed(() => {
@@ -42,7 +42,16 @@ function setView(v: ViewMode) {
       <button class="change" @click="state.scenePickerOpen = true" title="Choose another scene (s)">Change scene</button>
     </template>
     <nav class="views" aria-label="View">
-      <button v-for="v in views" :key="v.id" :class="{ on: state.view === v.id }" :title="v.hint" @click="setView(v.id)">{{ v.label }}</button>
+      <button
+        v-for="v in views"
+        :key="v.id"
+        :class="{ on: state.view === v.id, locked: viewLock(v.id) }"
+        :title="viewLock(v.id) ? `Needs the ${viewLock(v.id)!.name} bundle: ${viewLock(v.id)!.make}` : v.hint"
+        @click="setView(v.id)"
+      >
+        <svg v-if="viewLock(v.id)" class="lock" width="10" height="12" viewBox="0 0 10 12" aria-label="locked"><path d="M2 5V3.5a3 3 0 0 1 6 0V5h1v7H1V5zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0z" fill="currentColor" /></svg>
+        {{ v.label }}
+      </button>
     </nav>
   </header>
 </template>
@@ -128,6 +137,14 @@ function setView(v: ViewMode) {
 }
 .views button:hover {
   color: var(--text);
+}
+.views button.locked {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.views .lock {
+  margin-right: 5px;
+  vertical-align: -1px;
 }
 .views button.on {
   color: var(--text);

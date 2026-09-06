@@ -12,9 +12,10 @@ import FusionView from './components/FusionView.vue'
 import FusionInspector from './components/FusionInspector.vue'
 import SplatView from './components/SplatView.vue'
 import SplatInspector from './components/SplatInspector.vue'
+import LockedView from './components/LockedView.vue'
 import Timeline from './components/Timeline.vue'
 import CameraLightbox from './components/CameraLightbox.vue'
-import { loadScenes, state, stepFrame } from './state'
+import { loadScenes, state, stepFrame, viewLock } from './state'
 
 function onKey(e: KeyboardEvent) {
   if (e.target instanceof HTMLInputElement) return
@@ -42,7 +43,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <SceneHeader />
       <!-- Only one view is mounted at a time so its WebGL context and
            textures are released before the other one allocates its own. -->
-      <div class="stage" v-if="state.view === 'explore'">
+      <LockedView class="stage" v-if="viewLock(state.view)" />
+      <div class="stage" v-else-if="state.view === 'explore'">
         <div class="views">
           <CameraGrid class="cameras" />
           <PointCloudView class="cloud" />
