@@ -64,8 +64,8 @@ the data summary.
   `Float32Array` for lidar and radar, resized JPEGs for cameras. Serves
   `frontend/dist` at `/` when it exists.
 - `backend/app/depth.py` runs stock Depth Anything V2 (vendored model code in
-  `backend/app/depth_anything_v2`, checkpoint in `models/`, gitignored),
-  caches predictions under `nuscenes/cache/depth`, fits each image to the
+  `backend/app/depth_anything_v2`, checkpoint in `data/models/`),
+  caches predictions under `data/cache/depth`, fits each image to the
   lidar with a scale and shift, and reports AbsRel, RMSE, δ1.
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
@@ -78,7 +78,10 @@ compare against.
 
 ## Commands
 
-Dataset: extract `nuscenes/v1.0-mini.tar` into `nuscenes/data/` (gitignored).
+Everything large lives in `data/` (gitignored): `data/nuscenes` is the extracted
+split, `data/models` the Depth Anything checkpoint, `data/cache` the computed
+depth predictions. `make data` fetches all of it from the GitHub release listed
+in `data.manifest`. `make data-bundle` rebuilds that bundle from a local `data/`.
 
 - `make setup` installs Python deps with uv and npm deps.
 - `make backend` and `make frontend` run the two dev servers. Open

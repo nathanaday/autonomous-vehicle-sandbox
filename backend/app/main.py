@@ -1,8 +1,9 @@
 """HTTP API for the nuScenes viewer.
 
 Run from `backend/` with `uv run uvicorn app.main:app --reload`.
-Set NUSCENES_DATAROOT to point at the extracted split (defaults to
-`../nuscenes/data`). If `../frontend/dist` exists it is served at `/`.
+Everything large lives under `../data/` (see README, "Data"). Override the
+locations with NUSCENES_DATAROOT, DEPTH_ANYTHING_CHECKPOINT and DEPTH_CACHE.
+If `../frontend/dist` exists it is served at `/`.
 """
 
 from __future__ import annotations
@@ -22,11 +23,12 @@ from .depth import DepthEstimator
 from .nuscenes import NuScenes
 
 ROOT = Path(__file__).resolve().parents[2]
-DATAROOT = Path(os.environ.get("NUSCENES_DATAROOT", ROOT / "nuscenes" / "data"))
+DATA = ROOT / "data"
+DATAROOT = Path(os.environ.get("NUSCENES_DATAROOT", DATA / "nuscenes"))
 FRONTEND_DIST = ROOT / "frontend" / "dist"
 DEPTH_CHECKPOINT = Path(os.environ.get(
-    "DEPTH_ANYTHING_CHECKPOINT", ROOT / "models" / "depth-anything-v2" / "depth_anything_v2_vitb.pth"))
-DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", ROOT / "nuscenes" / "cache" / "depth"))
+    "DEPTH_ANYTHING_CHECKPOINT", DATA / "models" / "depth-anything-v2" / "depth_anything_v2_vitb.pth"))
+DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", DATA / "cache" / "depth"))
 
 nusc = NuScenes(DATAROOT)
 depth_model = DepthEstimator(DEPTH_CHECKPOINT, DEPTH_CACHE)

@@ -64,33 +64,65 @@ of the same keyframe is one of the things a real system would have to resolve.
 On the mini split the stock model lands at 9 to 16 percent AbsRel on the
 daytime scenes and 20 to 22 percent on the three night scenes.
 
-Setup: put the checkpoint at `models/depth-anything-v2/depth_anything_v2_vitb.pth`
-(from the Depth Anything V2 release on Hugging Face), or point
-`DEPTH_ANYTHING_CHECKPOINT` at it. Predictions are computed on first request
-and cached under `nuscenes/cache/depth`. `make depth-cache` fills the cache for
-the whole split in advance, about eight minutes on an Apple GPU.
+The checkpoint and the precomputed predictions ship in the data bundle (see
+Data). Predictions for any image missing from the cache are computed on first
+request and cached under `data/cache/depth`.
 
 ## Setup
 
 Requires Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), and Node
 20 or newer.
 
-1. Download `v1.0-mini.tar` from <https://www.nuscenes.org/nuscenes#download>
-   and put it at `nuscenes/v1.0-mini.tar`.
-2. Extract it:
+```sh
+make setup      # Python deps with uv, npm deps
+make data       # 4.6 GB download from the GitHub release, 6 GB extracted into data/
+```
 
-   ```sh
-   mkdir -p nuscenes/data && tar xf nuscenes/v1.0-mini.tar -C nuscenes/data
-   ```
+## Data
 
-3. Install dependencies:
+Everything large lives in `data/`, which git ignores:
 
-   ```sh
-   make setup
-   ```
+| Path | Contents | Size |
+|---|---|---|
+| `data/nuscenes/` | The extracted nuScenes `v1.0-mini` split | 5.1 GB |
+| `data/models/depth-anything-v2/` | `depth_anything_v2_vitb.pth` | 372 MB |
+| `data/cache/depth/` | Depth Anything output for every keyframe camera image, plus per-scene summaries | 559 MB |
 
-Set `NUSCENES_DATAROOT` if the extracted split lives somewhere other than
-`nuscenes/data`.
+All three are packaged as one bundle on the repository's
+[releases page](https://github.com/nathanaday/autonomous-vehicle-sandbox/releases),
+split into parts under 2 GB. `data.manifest` at the repository root records the
+release URL and a SHA-256 for every part and for the joined archive.
+
+**Option 1, the script.** `make data` runs `scripts/sync_data.sh`, which
+downloads the parts listed in `data.manifest`, verifies each checksum, joins
+and verifies the archive, extracts it into `data/`, and checks that the
+expected folders exist. It resumes interrupted downloads and does nothing if
+`data/` is already complete. It needs `curl` and `shasum` or `sha256sum`, and
+about 11 GB of free disk while it runs.
+
+**Option 2, by hand.** Download every `av-sandbox-data.tar.gz.part-*` file
+from the release, then:
+
+```sh
+cat av-sandbox-data.tar.gz.part-* > av-sandbox-data.tar.gz
+shasum -a 256 av-sandbox-data.tar.gz     # compare with the archive line in data.manifest
+mkdir -p data && tar -xzf av-sandbox-data.tar.gz -C data
+```
+
+**Option 3, from the sources.** Download `v1.0-mini.tar` from
+<https://www.nuscenes.org/nuscenes#download> and extract it so that
+`data/nuscenes/v1.0-mini/scene.json` exists. Download the Depth Anything V2
+ViT-B checkpoint from its Hugging Face release into
+`data/models/depth-anything-v2/`. Then run `make depth-cache` to compute the
+depth cache, about eight minutes on an Apple GPU. Without the checkpoint the
+Sensors view still works and the Depth Anything view reports the missing file.
+
+To publish a new bundle after changing `data/`, run `make data-bundle
+TAG=data-v2`, upload the files it writes to `data/bundle/` to a release with
+that tag, and commit the updated `data.manifest`.
+
+`NUSCENES_DATAROOT`, `DEPTH_ANYTHING_CHECKPOINT` and `DEPTH_CACHE` override
+the three locations.
 
 ## Run
 

@@ -1,0 +1,7 @@
+# Data bundle for autonomous-vehicle-sandbox. Read by scripts/sync_data.sh.
+# Regenerate with scripts/bundle_data.sh; edit url_base if the release moves.
+url_base https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v1
+archive av-sandbox-data.tar.gz 4c622233cc7bb86e2ad077342dd2a7d06d090c66756d484d94fd14f2cd1f85eb 4978652224
+part av-sandbox-data.tar.gz.part-aa c1d7d51a50d880b22d030afc674733515b2b59fa41c2c9167a5060b9ec7c280d 1992294400
+part av-sandbox-data.tar.gz.part-ab 06cd6125f705a18a0c8a3849cd62fd2d064fe17e166c24a26072b43451ea5911 1992294400
+part av-sandbox-data.tar.gz.part-ac 76dbb0210b08322a9d1a56b53af8b4c5e53a75dff078b94423b49b1085700ea5 994063424
