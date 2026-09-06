@@ -16,7 +16,7 @@ const names: Record<string, string> = {
       <h2>This view needs the {{ lock.name }} bundle</h2>
       <p>The cache has no {{ names[lock.name] }} for any scene. Fetch the bundle from the repository's releases, then restart the backend:</p>
       <pre>{{ lock.make }}</pre>
-      <p class="muted">Or compute the results yourself with the compute CLI. See README, Data, for the bundles and what each one unlocks.</p>
+      <p class="muted">Or compute the results yourself with the compute CLI. See DETAILS.md, Data, for the bundles and what each one unlocks.</p>
     </div>
   </section>
 </template>

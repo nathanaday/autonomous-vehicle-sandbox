@@ -79,7 +79,7 @@ echo
 cat "$MANIFEST"
 echo
 echo "Upload the parts to the '$TAG' release, then commit data.manifest:"
-echo "  gh release create $TAG --title 'Data bundles $TAG' --notes 'See README, Data.'   # once per tag"
+echo "  gh release create $TAG --title 'Data bundles $TAG' --notes 'See DETAILS.md, Data.'   # once per tag"
 for b in "${bundles[@]}"; do
   echo "  gh release upload $TAG data/bundle/$b/*.part-*"
 done

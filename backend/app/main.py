@@ -2,7 +2,7 @@
 
 Run from `backend/` with `uv run uvicorn app.main:app --reload`.
 Serves the dataset and the caches that compute/cli.py fills; it computes
-nothing itself. Everything large lives under `../data/` (see README, "Data").
+nothing itself. Everything large lives under `../data/` (see DETAILS.md, "Data").
 Override the locations with NUSCENES_DATAROOT, DEPTH_CACHE, FUSION_CACHE and
 SPLAT_CACHE. If `../frontend/dist` exists it is served at `/`.
 """
@@ -34,7 +34,7 @@ FUSION_CACHE = Path(os.environ.get("FUSION_CACHE", DATA / "cache" / "fusion"))
 SPLAT_CACHE = Path(os.environ.get("SPLAT_CACHE", DATA / "cache" / "splat"))
 
 if not (DATAROOT / "v1.0-mini" / "scene.json").exists():
-    raise SystemExit(f"nuScenes v1.0-mini not found at {DATAROOT}. Run 'make data' first; see README, Data.")
+    raise SystemExit(f"nuScenes v1.0-mini not found at {DATAROOT}. Run 'make data' first; see DETAILS.md, Data.")
 
 nusc = NuScenes(DATAROOT)
 depth = DepthCache(DEPTH_CACHE)
