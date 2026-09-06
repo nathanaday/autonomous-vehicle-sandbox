@@ -1,57 +1,86 @@
 # nuScenes sandbox
 
-A viewer for the nuScenes `v1.0-mini` split. Pick a scene, step through its
-keyframes, and see every sensor at once: the six cameras, the lidar sweep,
-the five radars, the annotated 3D boxes, and the path the car drove. Three
-more views show what models make of the same frames: monocular depth, a fused
-mesh of the scene, and a Gaussian splat. The point of the tool is to make the
-shape of the data obvious before choosing a project direction. See
-`depth-anything-av-application.md` for the research context.
+A viewer for the nuScenes `v1.0-mini` split. Pick a scene, step through its keyframes, and see every sensor at once: the six cameras, the lidar sweep, the five radars, the annotated 3D boxes, and the path the car drove. 
 
-The project has two halves. The viewer, `backend/` and `frontend/`, reads the
-dataset and precomputed results and needs no model. The compute side,
-`compute/`, runs the models offline and writes those results. A team member
-who wants to look at the results needs only the viewer and the data bundles.
+The project has two sides:
 
-> [!NOTE]
-> **Quickstart.** Needs Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), Node 20 or newer, and about 1 GB of free disk.
->
-> ```sh
-> git clone https://github.com/nathanaday/autonomous-vehicle-sandbox.git
-> cd autonomous-vehicle-sandbox
-> make setup       # uv creates backend/.venv and installs Python deps; npm installs frontend deps
-> make data        # three scenes of nuScenes from GitHub releases, 190 MB, into data/
-> make backend     # terminal 1: FastAPI on http://localhost:8000
-> make frontend    # terminal 2: Vite dev server on http://localhost:5173
-> ```
->
-> Open <http://localhost:5173>. `make data-depth`, `make data-fusion` and `make data-splat` add the precomputed results that unlock the other three views. For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
+
+### Data Viewer
 
 ![Night scene after rain](docs/screenshot.jpg)
 
-## Layout
 
-- **Header.** The current scene's name, tags, location, date, and
-  description. The Change scene button (or `s`) opens a picker with all ten
-  scenes as thumbnail cards, tagged `night` and `rain` from their
-  descriptions, with keyframe count, duration, and number of annotated
-  objects.
-- **Camera grid.** The six cameras in their physical arrangement, front row
-  and back row. Radar returns and annotation boxes project into each image.
-  Click any camera to open it full size with a lidar depth overlay.
-- **3D view.** Lidar points colored by height, intensity, or distance. Radar
-  returns as amber points with velocity streaks. Annotation boxes colored by
-  category. Sensor mounts, camera frustums, range rings, and the ego path
-  through the scene. Drag to orbit, right-drag to pan, scroll to zoom.
-- **Inspector.** Ego speed and pose, per-sensor counts, object counts by
-  category, and layer toggles.
-- **Timeline.** One bar per keyframe, taller when more objects are annotated.
-  Space plays at 2 keyframes per second, the rate they were recorded. Arrow
-  keys step.
+The viewer stack, `backend/` and `frontend/`, reads the dataset and precomputed results. Therefore, no models or heavy computations on device are required. 
 
-The URL hash tracks the view, so `#scene-1094/20/CAM_FRONT` opens scene 1094 at
-keyframe 20 with the front camera enlarged, and `#depth/scene-1094/20` opens the
-same keyframe in the depth view.
+> All precomputed data is available in the `releases` section and can be downloaded with the provided `make` files.
+
+### Compute Data For New Scenes
+
+Optionally, if you want to run new computations (depth, gaussians, etc.), you can download the corresponding models and use the `compute/` environment.
+
+## Quickstart
+
+### Requirements
+
+>[!NOTE]
+> 
+> - Python 3.12
+> - [uv Python environment](https://docs.astral.sh/uv/)
+> - Node 20 (or newer)
+> - ~1GB Disc Space
+
+
+### From Repository Source
+
+```sh
+git clone https://github.com/nathanaday/autonomous-vehicle-sandbox.git
+cd autonomous-vehicle-sandbox
+```
+
+### Provided `make` instructions
+
+```sh
+make setup 
+```
+
+> `setup` uses `uv`, creates `backend/.venv` and installs Python deps; `npm` installs frontend deps
+
+
+```sh
+make data
+```
+
+> Downloads the `NuScenes` data from the repo's releases page
+
+```sh
+make backend
+```
+
+> Starts the backend server (`FastAPI`)
+
+```sh
+make frontend
+```
+
+> Starts the frontend server (`vite` dev server) 
+> <http://localhost:5173>. 
+
+```sh
+make data-depth    # Depth Anything predictions: Depth Anything view
+make data-fusion   # fused meshes: Fused mesh view
+make data-splat    # Gaussian splats: Gaussian splat view
+```
+
+> Downloads the precomputed results that unlock the other three views (depth, fusion, splat, respectively) - note you can run any or all of these depending on what you want to see
+
+```sh
+make demo
+```
+
+> For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
+
+
+# Provided Views
 
 ## Depth Anything view
 
@@ -162,29 +191,6 @@ about three and a half minutes on an Apple GPU, and its `--views 18` and
 Anything 3 checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
 the DA3 code installed by pip are Apache 2.0.
 
-## Setup
-
-Requires Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), and Node
-20 or newer.
-
-```sh
-make setup      # Python deps with uv, npm deps
-make data       # the dataset bundle, 190 MB, unlocks the Sensors view
-```
-
-The other views read precomputed results. Each is a separate download so a
-look at the dataset costs 190 MB, not 5 GB:
-
-```sh
-make data-depth    # Depth Anything predictions: Depth Anything view
-make data-fusion   # fused meshes: Fused mesh view
-make data-splat    # Gaussian splats: Gaussian splat view
-```
-
-Computing results yourself, for more scenes or other settings, needs the
-compute side: `make compute-setup` installs its environment and both
-checkpoints (7.2 GB), then `make compute SCENES="scene-0655" TASK=all`. See
-`compute/README.md`.
 
 ## Data
 
@@ -245,20 +251,7 @@ scenes.
 `NUSCENES_DATAROOT`, `DEPTH_CACHE`, `FUSION_CACHE` and `SPLAT_CACHE` override
 the locations for the backend and the compute CLI alike.
 
-## Run
 
-Development, with hot reload on both sides. Two terminals:
-
-```sh
-make backend    # FastAPI on http://localhost:8000
-make frontend   # Vite on http://localhost:5173, proxies /api to the backend
-```
-
-Demo, one process:
-
-```sh
-make demo       # builds the UI, then serves it and the API on http://localhost:8000
-```
 
 ## How it fits together
 
