@@ -17,13 +17,12 @@ const errors = computed(() => {
 })
 const maxError = computed(() => (errors.value ? Math.max(0.01, ...errors.value.values()) : 1))
 
-/** In the splat view the bars show which keyframes have a splat built. */
+/** In the splat view the bars show which keyframes have a splat in the cache. */
 const built = computed(() => {
   const sc = state.view === 'splat' ? sceneSplat.value : null
   if (!sc || sc.scene_token !== state.scene?.token) return null
   return new Map(sc.keyframes.map((k) => [k.token, k.ready]))
 })
-const building = computed(() => (state.view === 'splat' ? sceneSplat.value?.job?.current?.token ?? null : null))
 
 function barHeight(s: { token: string; nbr_annotations: number }) {
   if (built.value) return built.value.get(s.token) ? 100 : 20
@@ -31,7 +30,7 @@ function barHeight(s: { token: string; nbr_annotations: number }) {
   return 25 + (75 * s.nbr_annotations) / maxAnnotations.value
 }
 function barTitle(s: { token: string; nbr_annotations: number }, i: number) {
-  if (built.value) return `Keyframe ${i + 1}, ${s.token === building.value ? 'building' : built.value.get(s.token) ? 'splat built' : 'no splat yet'}`
+  if (built.value) return `Keyframe ${i + 1}, ${built.value.get(s.token) ? 'splat computed' : 'no splat'}`
   const e = errors.value?.get(s.token)
   return e !== undefined ? `Keyframe ${i + 1}, AbsRel ${(e * 100).toFixed(1)}%` : `Keyframe ${i + 1}, ${s.nbr_annotations} objects`
 }
@@ -67,7 +66,7 @@ function cycleSpeed() {
           v-for="(s, i) in samples"
           :key="s.token"
           class="tick"
-          :class="{ current: i === detail.index, past: i < detail.index, unbuilt: built ? !built.get(s.token) : false, building: s.token === building }"
+          :class="{ current: i === detail.index, past: i < detail.index, unbuilt: built ? !built.get(s.token) : false }"
           :title="barTitle(s, i)"
           @click="goToIndex(i)"
         >
@@ -159,22 +158,6 @@ function cycleSpeed() {
 }
 .tick.unbuilt .bar {
   opacity: 0.35;
-}
-.tick.building .bar {
-  opacity: 1;
-  background: var(--accent);
-  animation: pulse 1s ease-in-out infinite alternate;
-}
-@keyframes pulse {
-  from {
-    opacity: 0.4;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.tick:hover .bar {
-  background: var(--text);
 }
 .readout {
   display: flex;

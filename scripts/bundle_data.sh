@@ -2,63 +2,54 @@
 # Pack data/ into split .tar.gz bundles for a GitHub release and update
 # data.manifest.
 #
-#   scripts/bundle_data.sh <release-tag> [dataset] [depth] [splat]   # default: all three
+#   scripts/bundle_data.sh <release-tag> [dataset] [depth] [fusion] [splat]   # default: all four
+#   SCENES="scene-0061 scene-0103" scripts/bundle_data.sh data-v3 splat
 #
-# Bundles:
-#   dataset  data/nuscenes
-#   depth    data/models/depth-anything-v2, data/cache/depth, data/cache/fusion
-#   splat    data/models/da3, data/cache/splat
-#
-# Each bundle's parts stay under GitHub's 2 GB per-file limit and go to
-# data/bundle/<name>/. The manifest keeps its lines for bundles not rebuilt,
-# with the release URL they were uploaded to, so one bundle can be re-released
-# under a new tag without touching the others. Afterwards, upload the parts to
-# the release named by the tag (the script prints the command), then commit
-# data.manifest.
+# Bundles hold only the listed scenes (default: the three in SCENES below):
+#   dataset  the nuScenes tables and each scene's keyframe files, no sweeps
+#   depth    Depth Anything predictions and per-scene summaries
+#   fusion   fused meshes
+#   splat    Gaussian splats
+# scripts/list_files.py chooses the files. Each bundle's parts stay under
+# GitHub's 2 GB per-file limit and go to data/bundle/<name>/. The manifest
+# keeps its lines for bundles not rebuilt, with the release URL they were
+# uploaded to, so one bundle can be re-released under a new tag without
+# touching the others. Afterwards, upload the parts to the release named by
+# the tag (the script prints the command), then commit data.manifest.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="${1:-}"
-[ -n "$TAG" ] || { echo "usage: scripts/bundle_data.sh <release-tag> [dataset] [depth] [splat]" >&2; exit 1; }
+[ -n "$TAG" ] || { echo "usage: scripts/bundle_data.sh <release-tag> [dataset] [depth] [fusion] [splat]" >&2; exit 1; }
 shift
+SCENES="${SCENES:-scene-0061 scene-0103 scene-1094}"
 REPO_URL="https://github.com/nathanaday/autonomous-vehicle-sandbox"
 URL_BASE="$REPO_URL/releases/download/$TAG"
 OUT="$ROOT/data/bundle"
 MANIFEST="$ROOT/data.manifest"
 PART_SIZE="1900m"
 
-contents() {
-  case "$1" in
-    dataset) echo "nuscenes" ;;
-    depth) echo "models/depth-anything-v2 cache/depth cache/fusion" ;;
-    splat) echo "models/da3 cache/splat" ;;
-    *) echo "unknown bundle '$1'; choose from dataset, depth, splat" >&2; exit 1 ;;
-  esac
-}
-
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 size() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1"; }
 
 bundles=("$@")
-[ ${#bundles[@]} -gt 0 ] || bundles=(dataset depth splat)
-for b in "${bundles[@]}"; do contents "$b" >/dev/null; done
-
-cd "$ROOT/data"
+[ ${#bundles[@]} -gt 0 ] || bundles=(dataset depth fusion splat)
 for b in "${bundles[@]}"; do
-  for d in $(contents "$b"); do
-    [ -e "$d" ] || { echo "missing data/$d, needed by the $b bundle" >&2; exit 1; }
-  done
+  case "$b" in dataset|depth|fusion|splat) ;; *) echo "unknown bundle '$b'" >&2; exit 1 ;; esac
 done
 
+cd "$ROOT/data"
 new_lines="$(mktemp)"
 for b in "${bundles[@]}"; do
   name="av-sandbox-$b.tar.gz"
   dir="$OUT/$b"
   rm -rf "$dir" && mkdir -p "$dir"
-  echo "$b: archiving data/{$(contents "$b" | tr ' ' ',')} ..."
-  # shellcheck disable=SC2046
-  COPYFILE_DISABLE=1 tar --exclude '.DS_Store' --exclude 'job-*' --exclude '*.progress.json' \
-    -cf - $(contents "$b") | gzip -1 > "$dir/$name"
+  list="$dir/files.txt"
+  # shellcheck disable=SC2086
+  (cd "$ROOT" && uv run --project backend python scripts/list_files.py "$b" $SCENES) > "$list"
+  echo "$b: archiving $(wc -l < "$list" | tr -d ' ') files for $SCENES ..."
+  COPYFILE_DISABLE=1 tar --exclude '.DS_Store' -cf - -T "$list" | gzip -1 > "$dir/$name"
+  rm "$list"
   echo "$b: splitting into $PART_SIZE parts ..."
   (cd "$dir" && split -b "$PART_SIZE" -a 2 "$name" "$name.part-")
   echo "bundle $b $name $(sha "$dir/$name") $(size "$dir/$name") $URL_BASE" >> "$new_lines"
@@ -78,7 +69,7 @@ fi
   echo "# Regenerate a bundle with scripts/bundle_data.sh <tag> <bundle>."
   echo "# bundle <name> <archive> <sha256> <bytes> <release url>"
   echo "# part <name> <file> <sha256> <bytes>"
-  for b in dataset depth splat; do
+  for b in dataset depth fusion splat; do
     awk -v b="$b" '$2 == b' "$kept" "$new_lines"
   done
 } > "$MANIFEST"

@@ -1,12 +1,12 @@
-# Data: `make data` downloads the 5 GB dataset bundle into data/ (see README).
-# `make data-depth` and `make data-splat` add the optional bundles that unlock
-# the Depth Anything, fused mesh and Gaussian splat views.
-# Development: run `make backend` and `make frontend` in two terminals,
-# then open http://localhost:5173.
-# Demo: `make demo` builds the UI and serves everything from one process
-# at http://localhost:8000.
+# Viewing: `make setup`, `make data` (the dataset bundle) plus `make data-depth`,
+# `make data-fusion`, `make data-splat` for the precomputed results of each
+# view, then `make backend` and `make frontend` in two terminals (or `make demo`).
+# Computing: `make compute-setup` once, then `make compute SCENES="scene-0061"`.
 
-.PHONY: setup data data-depth data-splat data-all data-bundle splat-setup backend frontend build demo check depth-cache
+.PHONY: setup data data-depth data-fusion data-splat data-all data-bundle compute-setup models compute backend frontend build demo check
+
+SCENES ?= scene-0061 scene-0103 scene-1094
+TASK ?= all
 
 setup:
 	cd backend && uv sync
@@ -18,20 +18,30 @@ data:
 data-depth:
 	scripts/sync_data.sh depth
 
+data-fusion:
+	scripts/sync_data.sh fusion
+
 data-splat:
 	scripts/sync_data.sh splat
 
 data-all:
-	scripts/sync_data.sh dataset depth splat
+	scripts/sync_data.sh dataset depth fusion splat
 
 # Pack data/ for a release: make data-bundle TAG=data-v3 BUNDLES="depth splat"
 data-bundle:
-	scripts/bundle_data.sh $(TAG) $(BUNDLES)
+	SCENES="$(SCENES)" scripts/bundle_data.sh $(TAG) $(BUNDLES)
 
-# The splat bundle plus the Depth Anything 3 environment for building new
-# splats. Viewing cached splats needs only the bundle.
-splat-setup: data-splat
-	cd tools/da3 && uv sync
+# The compute side: its own environment (torch, open3d, Depth Anything 3) and
+# both checkpoints, 7.2 GB. Only needed to compute results, not to view them.
+compute-setup: models
+	cd compute && uv sync
+
+models:
+	scripts/fetch_models.sh
+
+# make compute SCENES="scene-0061 scene-0103" TASK=depth
+compute:
+	cd compute && uv run python cli.py $(TASK) $(foreach s,$(SCENES),--scene $(s))
 
 backend:
 	cd backend && uv run uvicorn app.main:app --reload --port 8000
@@ -47,6 +57,3 @@ demo: build
 
 check:
 	cd frontend && npx vue-tsc --noEmit
-
-depth-cache:
-	cd backend && uv run python -m app.precompute_depth

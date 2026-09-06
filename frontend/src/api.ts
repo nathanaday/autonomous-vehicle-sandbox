@@ -16,6 +16,7 @@ export interface SceneSummary {
   nbr_instances: number
   category_counts: Record<string, number>
   sweep_counts: Record<string, number>
+  features: { depth: boolean; fusion: boolean; splat: boolean }
 }
 
 export interface SceneSample {
@@ -132,11 +133,7 @@ export const RADAR_STRIDE = 8
 
 export interface DepthModelInfo {
   model: string
-  checkpoint: string
-  available: boolean
-  device: string
   output: string
-  last_inference_s: number | null
 }
 
 export interface DepthMetrics {
@@ -191,8 +188,7 @@ export interface FusionPose {
 
 export interface FusionStatus {
   key: string
-  state: 'running' | 'ready' | 'error'
-  progress?: number
+  state: 'ready' | 'missing' | 'error'
   message?: string
   scene_token?: string
   source?: FusionSource
@@ -220,15 +216,12 @@ export interface SplatViewMeta {
   lidar?: { n: number; abs_rel: number; delta1: number; median_scale_to_lidar: number; abs_rel_after_scale: number }
 }
 
-/** One keyframe's splat: its stats once built, otherwise where it stands.
- *  'running' and 'queued' refer to the build job in progress; 'missing'
- *  means nobody has asked for it yet. */
+/** One keyframe's splat: its stats once computed, otherwise 'missing' with
+ *  the compute command in the message. */
 export interface SplatStatus {
   key: string
-  state: 'ready' | 'running' | 'queued' | 'missing' | 'error'
-  progress?: number
+  state: 'ready' | 'missing' | 'error'
   message?: string
-  tail?: string[]
   sample_token?: string
   model?: string
   device?: string
@@ -245,25 +238,6 @@ export interface SplatStatus {
   ply_bytes?: number
 }
 
-/** The one build job the backend runs at a time; stays as the last job
- *  after it finishes so its result or error can be shown. */
-export interface SplatJob {
-  id: number
-  label: string
-  scene_token: string
-  views: number
-  posed: boolean
-  keys: string[]
-  state: 'running' | 'cancelling' | 'done' | 'cancelled' | 'error'
-  total: number
-  index: number
-  current: { token: string; key: string } | null
-  progress: number
-  message: string
-  tail: string[]
-  seconds: number
-}
-
 export interface SceneSplatStatus {
   scene_token: string
   views: number
@@ -271,31 +245,25 @@ export interface SceneSplatStatus {
   keyframes: { token: string; key: string; ready: boolean }[]
   n_ready: number
   n_total: number
-  job: SplatJob | null
+  message?: string
 }
 
-/** The data bundles the backend found on disk. Each unlocks views; a view
- *  whose bundle is missing shows how to fetch it instead of its content. */
-export type BundleName = 'dataset' | 'depth' | 'splat'
-export interface BundleInfo {
+/** Which features have results in the cache for at least one scene. Each
+ *  unlocks views; a view whose feature has nothing shows how to fetch its
+ *  data bundle instead of its content. */
+export type FeatureName = 'dataset' | 'depth' | 'fusion' | 'splat'
+export interface FeatureInfo {
   present: boolean
   views: string[]
-  path: string
   make: string
 }
-export type Bundles = Record<BundleName, BundleInfo>
+export type Features = Record<FeatureName, FeatureInfo>
 
 export const DEPTH_CLOUD_STRIDE = 7
 export const DEPTH_LIDAR_STRIDE = 5
 
 async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url)
-  if (!r.ok) throw new Error(`${r.status} ${url}`)
-  return r.json()
-}
-
-async function postJson<T>(url: string): Promise<T> {
-  const r = await fetch(url, { method: 'POST' })
   if (!r.ok) {
     const body = await r.json().catch(() => null)
     throw new Error(body?.detail ?? `${r.status} ${url}`)
@@ -310,7 +278,7 @@ async function getFloat32(url: string): Promise<Float32Array> {
 }
 
 export const api = {
-  bundles: () => getJson<Bundles>('/api/bundles'),
+  features: () => getJson<Features>('/api/features'),
   scenes: () => getJson<SceneSummary[]>('/api/scenes'),
   scene: (token: string) => getJson<SceneDetail>(`/api/scenes/${token}`),
   async frame(token: string): Promise<Frame> {
@@ -323,7 +291,6 @@ export const api = {
   },
   imageUrl: (sdToken: string, width?: number) =>
     width ? `/api/image/${sdToken}?w=${width}` : `/api/image/${sdToken}`,
-  depthInfo: () => getJson<DepthModelInfo>('/api/depth/info'),
   async depth(token: string): Promise<DepthFrame> {
     const [detail, cloud, lidar] = await Promise.all([
       getJson<DepthDetail>(`/api/samples/${token}/depth`),
@@ -340,11 +307,6 @@ export const api = {
     getJson<SplatStatus>(`/api/samples/${sampleToken}/splat?views=${views}&posed=${posed}`),
   sceneSplat: (sceneToken: string, views: number, posed: boolean) =>
     getJson<SceneSplatStatus>(`/api/scenes/${sceneToken}/splat?views=${views}&posed=${posed}`),
-  buildSceneSplat: (sceneToken: string, views: number, posed: boolean) =>
-    postJson<SceneSplatStatus>(`/api/scenes/${sceneToken}/splat/build?views=${views}&posed=${posed}`),
-  buildSampleSplat: (sampleToken: string, views: number, posed: boolean) =>
-    postJson<SceneSplatStatus>(`/api/samples/${sampleToken}/splat/build?views=${views}&posed=${posed}`),
-  cancelSplat: () => postJson<{ cancelled: boolean }>('/api/splat/cancel'),
   splatUrl: (key: string) => `/api/splat/${key}.ply`,
   depthImageUrl: (sdToken: string, width?: number) =>
     width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,

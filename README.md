@@ -1,25 +1,31 @@
 # nuScenes sandbox
 
-A viewer for the nuScenes `v1.0-mini` split. Pick one of the ten scenes, step
-through its keyframes, and see every sensor at once: the six cameras, the
-lidar sweep, the five radars, the annotated 3D boxes, and the path the car
-drove. The point of the tool is to make the shape of the data obvious before
-choosing a project direction. See `depth-anything-av-application.md` for the
-research context.
+A viewer for the nuScenes `v1.0-mini` split. Pick a scene, step through its
+keyframes, and see every sensor at once: the six cameras, the lidar sweep,
+the five radars, the annotated 3D boxes, and the path the car drove. Three
+more views show what models make of the same frames: monocular depth, a fused
+mesh of the scene, and a Gaussian splat. The point of the tool is to make the
+shape of the data obvious before choosing a project direction. See
+`depth-anything-av-application.md` for the research context.
+
+The project has two halves. The viewer, `backend/` and `frontend/`, reads the
+dataset and precomputed results and needs no model. The compute side,
+`compute/`, runs the models offline and writes those results. A team member
+who wants to look at the results needs only the viewer and the data bundles.
 
 > [!NOTE]
-> **Quickstart.** Needs Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), Node 20 or newer, and about 11 GB of free disk.
+> **Quickstart.** Needs Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), Node 20 or newer, and about 1 GB of free disk.
 >
 > ```sh
 > git clone https://github.com/nathanaday/autonomous-vehicle-sandbox.git
 > cd autonomous-vehicle-sandbox
 > make setup       # uv creates backend/.venv and installs Python deps; npm installs frontend deps
-> make data        # downloads the 4.6 GB data bundle from GitHub releases and extracts it into data/
+> make data        # three scenes of nuScenes from GitHub releases, 190 MB, into data/
 > make backend     # terminal 1: FastAPI on http://localhost:8000
 > make frontend    # terminal 2: Vite dev server on http://localhost:5173
 > ```
 >
-> Open <http://localhost:5173>. For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
+> Open <http://localhost:5173>. `make data-depth`, `make data-fusion` and `make data-splat` add the precomputed results that unlock the other three views. For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
 
 ![Night scene after rain](docs/screenshot.jpg)
 
@@ -51,7 +57,7 @@ same keyframe in the depth view.
 
 ![Depth view, night scene, top-down by camera](docs/depth-view.jpg)
 
-The second view runs stock Depth Anything V2 (ViT-B, no fine tuning) on all
+The second view shows stock Depth Anything V2 (ViT-B, no fine tuning) run on all
 six cameras and puts the result next to the lidar. It is the baseline for
 both project directions in `depth-anything-av-application.md`.
 
@@ -78,9 +84,10 @@ of the same keyframe is one of the things a real system would have to resolve.
 On the mini split the stock model lands at 9 to 16 percent AbsRel on the
 daytime scenes and 20 to 22 percent on the three night scenes.
 
-The checkpoint and the precomputed predictions ship in the data bundle (see
-Data). Predictions for any image missing from the cache are computed on first
-request and cached under `data/cache/depth`.
+The predictions come precomputed in the `depth` bundle (see Data) or from
+`compute/cli.py depth`, under `data/cache/depth`. The fit to lidar and the
+error numbers are computed by the backend per request from the cached
+prediction, so they need no model.
 
 ## Fused mesh view
 
@@ -104,10 +111,12 @@ come from the photos.
   alignment can be judged by eye. Shading can be photo colors, lit, or
   normals, with a wireframe toggle.
 
-Each combination of scene, source, voxel size and masking is built once on
-first request, about 25 seconds, decimated to 700 000 triangles, and cached
-under `data/cache/fusion` as a 30 MB PLY. The fusion cache is not part of the
-data bundle.
+Each combination of scene, source, voxel size and masking is a separate
+mesh, decimated to 700 000 triangles, about 30 MB as PLY under
+`data/cache/fusion`. The `fusion` bundle carries all twelve combinations for
+each of its scenes; `compute/cli.py fusion` makes them, about 25 seconds
+each. A combination missing from the cache shows the command that computes
+it.
 
 ## Gaussian splat view
 
@@ -143,24 +152,15 @@ positions disagreed with its depth map by a factor of 1.4 to 2.5, so the
 exporter keeps the model's rays, colors, opacities and shapes but places every
 Gaussian on the metric depth map along calibrated rays.
 
-The view needs the `splat` bundle, and building new splats needs the Depth
-Anything 3 environment, which is separate because DA3 pins `numpy<2`:
-
-```sh
-make data-splat     # the checkpoint and cached splats, about 9 GB; enough to view them
-make splat-setup    # the bundle plus its own uv environment under tools/da3, to build more
-```
-
-Splats are built on request, never by stepping or playing through keyframes.
-The view offers to build the current keyframe or every keyframe the scene is
-missing; a scene build loads the model once and then takes about 5 seconds per
-keyframe on the Apple GPU, with progress in the panel and on the timeline. The
-backend runs one build at a time and refuses a second one while it runs.
-Results cache under `data/cache/splat` as 40 MB PLY files that any 3DGS viewer
-can open, and once a scene is built, playback shows the splat of each keyframe
-from the cache. Without the bundle the other views work and this one is
-locked. The checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code
-and the DA3 code installed by pip are Apache 2.0.
+Splats come precomputed in the `splat` bundle, as 40 MB 3DGS PLY files under
+`data/cache/splat` that any 3DGS viewer can open, one per keyframe for the
+six-view calibrated setting. The viewer never runs the model: a keyframe
+without a splat shows the command that computes it, and playback shows each
+keyframe's splat from the cache. `compute/cli.py splat` computes a scene in
+about three and a half minutes on an Apple GPU, and its `--views 18` and
+`--unposed` options fill the other settings the panel offers. The Depth
+Anything 3 checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
+the DA3 code installed by pip are Apache 2.0.
 
 ## Setup
 
@@ -169,46 +169,58 @@ Requires Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), and Node
 
 ```sh
 make setup      # Python deps with uv, npm deps
-make data       # the nuScenes v1.0-mini dataset, 5 GB, unlocks the Sensors view
+make data       # the dataset bundle, 190 MB, unlocks the Sensors view
 ```
 
-The other views need more data. Each is a separate download so a look at the
-dataset costs 5 GB, not 20:
+The other views read precomputed results. Each is a separate download so a
+look at the dataset costs 190 MB, not 5 GB:
 
 ```sh
-make data-depth   # Depth Anything V2 checkpoint and caches, about 1 GB: Depth Anything and Fused mesh views
-make data-splat   # Depth Anything 3 checkpoint and cached splats, about 9 GB: Gaussian splat view
+make data-depth    # Depth Anything predictions: Depth Anything view
+make data-fusion   # fused meshes: Fused mesh view
+make data-splat    # Gaussian splats: Gaussian splat view
 ```
+
+Computing results yourself, for more scenes or other settings, needs the
+compute side: `make compute-setup` installs its environment and both
+checkpoints (7.2 GB), then `make compute SCENES="scene-0655" TASK=all`. See
+`compute/README.md`.
 
 ## Data
 
-Everything large lives in `data/`, which git ignores, in three bundles. The
-backend reports which are installed at `/api/bundles`, and the UI locks the
-views whose bundle is missing and shows the command that fetches it.
+Everything large lives in `data/`, which git ignores. The dataset and the
+results of each feature are separate bundles, and each holds three scenes:
+0061 (Singapore, day), 0103 (Boston, day) and 1094 (Singapore, night). The
+backend reports which features have results at `/api/features`, and the UI
+locks the views whose feature has none and shows the command that fetches
+them.
 
 | Bundle | Path | Contents | Size | Unlocks |
 |---|---|---|---|---|
-| `dataset` | `data/nuscenes/` | The extracted nuScenes `v1.0-mini` split | 5.1 GB | Sensors |
-| `depth` | `data/models/depth-anything-v2/`, `data/cache/depth/`, `data/cache/fusion/` | `depth_anything_v2_vitb.pth`, Depth Anything output for every keyframe camera image with per-scene summaries, fused meshes | 1.0 GB | Depth Anything, Fused mesh |
-| `splat` | `data/models/da3/`, `data/cache/splat/` | Depth Anything 3 checkpoint, splats of scenes 0061 and 0103 | 9.4 GB | Gaussian splat |
+| `dataset` | `data/nuscenes/` | The `v1.0-mini` tables and the keyframe files of the three scenes; no sweeps | 0.2 GB | Sensors |
+| `depth` | `data/cache/depth/` | Depth Anything output for every keyframe camera image, with per-scene summaries | 0.1 GB | Depth Anything |
+| `fusion` | `data/cache/fusion/` | Fused meshes, twelve per scene | 0.7 GB | Fused mesh |
+| `splat` | `data/cache/splat/` | Gaussian splats, one per keyframe | 4.0 GB | Gaussian splat |
 
 The `dataset` bundle is required; the backend refuses to start without it.
-The fused mesh view can also build from lidar alone, but it lives behind the
-`depth` bundle because its camera source and its cache come from Depth
-Anything. New fusion meshes and splats build on request and grow the caches.
+The tables list all ten scenes of the split, and the backend shows the ones
+whose files are on disk, so a full `v1.0-mini` extracted into
+`data/nuscenes/` works too and shows all ten. Model checkpoints are not in
+any bundle; `scripts/fetch_models.sh` fetches them for the compute side.
 
 The bundles are split into parts under 2 GB on the repository's
 [releases page](https://github.com/nathanaday/autonomous-vehicle-sandbox/releases).
 `data.manifest` at the repository root records, for each bundle, the release
 URL and a SHA-256 for every part and for the joined archive.
 
-**Option 1, the script.** `make data`, `make data-depth` and `make data-splat`
-run `scripts/sync_data.sh` for one bundle; `make data-all` fetches all three.
-The script downloads the parts listed in `data.manifest`, verifies each
-checksum, joins and verifies the archive, extracts it into `data/`, and checks
-that the bundle's marker file exists. It resumes interrupted downloads and
-skips a bundle that is already installed. It needs `curl` and `shasum` or
-`sha256sum`, and free disk of about twice the bundle's size while it extracts.
+**Option 1, the script.** `make data`, `make data-depth`, `make data-fusion`
+and `make data-splat` run `scripts/sync_data.sh` for one bundle; `make
+data-all` fetches all four. The script downloads the parts listed in
+`data.manifest`, verifies each checksum, joins and verifies the archive,
+extracts it into `data/`, and checks that the bundle's marker path exists. It
+resumes interrupted downloads and skips a bundle that is already installed.
+It needs `curl` and `shasum` or `sha256sum`, and free disk of about twice the
+bundle's size while it extracts.
 
 **Option 2, by hand.** Download every `av-sandbox-<bundle>.tar.gz.part-*`
 file from the release, then:
@@ -221,20 +233,17 @@ mkdir -p data && tar -xzf av-sandbox-dataset.tar.gz -C data
 
 **Option 3, from the sources.** Download `v1.0-mini.tar` from
 <https://www.nuscenes.org/nuscenes#download> and extract it so that
-`data/nuscenes/v1.0-mini/scene.json` exists. Download the Depth Anything V2
-ViT-B checkpoint from its Hugging Face release into
-`data/models/depth-anything-v2/`, then run `make depth-cache` to compute the
-depth cache, about eight minutes on an Apple GPU. `scripts/fetch_da3.sh`
-downloads the Depth Anything 3 checkpoint from Hugging Face; splats then build
-from the view.
+`data/nuscenes/v1.0-mini/scene.json` exists. Then compute the results with
+the compute side, `compute/README.md`.
 
 To publish a bundle after changing its part of `data/`, run `make data-bundle
 TAG=data-v3 BUNDLES=splat`, upload the files it writes to `data/bundle/splat/`
 to a release with that tag, and commit the updated `data.manifest`. Bundles
-not rebuilt keep their lines and their release URL.
+not rebuilt keep their lines and their release URL. `SCENES` chooses the
+scenes.
 
-`NUSCENES_DATAROOT`, `DEPTH_ANYTHING_CHECKPOINT`, `DEPTH_CACHE`,
-`FUSION_CACHE`, `SPLAT_CACHE` and `DA3_MODEL_DIR` override the locations.
+`NUSCENES_DATAROOT`, `DEPTH_CACHE`, `FUSION_CACHE` and `SPLAT_CACHE` override
+the locations for the backend and the compute CLI alike.
 
 ## Run
 
@@ -280,10 +289,12 @@ Open3D's scalable TSDF volume, masks moving objects using the annotation
 boxes, and writes binary PLY plus a JSON sidecar with stats and per-keyframe
 ego poses in the scene frame.
 
-`tools/da3/splat_export.py` runs Depth Anything 3 in its own environment on a
-list of keyframes, loading the model once, and writes a 3DGS PLY per keyframe
-in its ego frame; `backend/app/splat.py` launches it as a subprocess for one
-build at a time, follows its progress file, and serves the results.
+`compute/` holds everything that runs a model: `depth.py` for Depth Anything
+V2, `fusion.py` for the TSDF mesh, `splat_export.py` for Depth Anything 3,
+and `cli.py`, which fills the cache for named scenes and loads each model
+once. It imports the loader and the cache classes from `backend/app`, so both
+sides name files the same way. `backend/app/depth.py`, `fusion.py` and
+`splat.py` only read the cache; the backend's environment has no torch.
 
 `frontend/src` is Vue 3 with a small reactive store in `state.ts`. The four
 views share the Three.js scaffolding in `composables/useThreeScene.ts`, with

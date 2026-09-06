@@ -5,7 +5,7 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import { api, LIDAR_STRIDE, type FusionStatus } from '../api'
 import { COLORS } from '../geometry'
 import { egoOutline, setPoints, useThreeScene } from '../composables/useThreeScene'
-import { frame, fusionLayers, fusionStatus, state } from '../state'
+import { frame, fusionLayers, fusionStatus } from '../state'
 
 const host = ref<HTMLDivElement | null>(null)
 const { scene, camera, controls, rings, ego, preset, setView } = useThreeScene(host)
@@ -143,16 +143,15 @@ onUnmounted(() => {
   geometryCache.clear()
 })
 
-const progressPct = computed(() => Math.round((fusionStatus.value?.progress ?? 0) * 100))
 </script>
 
 <template>
   <section class="cloud">
     <div class="host" ref="host"></div>
-    <div class="banner" v-if="fusionStatus?.state === 'running'">
-      <div class="title">Fusing {{ state.scene?.name }} from {{ fusionLayers.source === 'camera' ? 'camera depth' : 'lidar' }}</div>
-      <div class="muted">{{ fusionStatus.message }}</div>
-      <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
+    <div class="banner" v-if="fusionStatus?.state === 'missing'">
+      <div class="title">No fused mesh computed for these settings</div>
+      <div class="muted">Meshes are computed offline and read from the cache.</div>
+      <pre class="cmd">{{ fusionStatus.message?.replace(/^.*offline: /, '') }}</pre>
     </div>
     <div class="banner error" v-else-if="fusionStatus?.state === 'error' || loadError">{{ fusionStatus?.message || loadError }}</div>
     <div class="banner" v-else-if="loading"><div class="title">Loading mesh</div></div>
@@ -201,18 +200,14 @@ const progressPct = computed(() => Math.round((fusionStatus.value?.progress ?? 0
   color: #ffd2d2;
   border-color: #8a3a44;
 }
-.bar {
-  margin-top: 8px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--line);
-  overflow: hidden;
-}
-.bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 300ms;
+.cmd {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  background: var(--ground);
+  border-radius: var(--radius);
+  user-select: all;
 }
 .hud {
   position: absolute;

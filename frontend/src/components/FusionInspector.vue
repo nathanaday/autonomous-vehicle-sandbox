@@ -44,7 +44,7 @@ function extent(): string {
         </div>
       </div>
       <button class="toggle" :class="{ on: fusionLayers.maskMoving }" @click="fusionLayers.maskMoving = !fusionLayers.maskMoving"><span>Mask moving objects</span><span class="knob"></span></button>
-      <p class="note muted">Each combination is built once, in about half a minute, and cached.</p>
+      <p class="note muted">Each combination is a separate mesh, computed offline by the compute CLI and read from data/cache/fusion.</p>
     </section>
 
     <section v-if="s">

@@ -5,7 +5,7 @@ import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 import { api, LIDAR_STRIDE, type SplatStatus } from '../api'
 import { COLORS } from '../geometry'
 import { setPoints, useThreeScene } from '../composables/useThreeScene'
-import { cancelSplatBuild, frame, sceneSplat, splatBuildError, splatLayers, splatStatus, startSplatBuild, state } from '../state'
+import { frame, sceneSplat, splatLayers, splatStatus, state } from '../state'
 
 const host = ref<HTMLDivElement | null>(null)
 const { scene, renderer, rings, ego, preset, setView } = useThreeScene(host)
@@ -168,10 +168,6 @@ onUnmounted(() => {
   }
 })
 
-const job = computed(() => sceneSplat.value?.job ?? null)
-const jobActive = computed(() => job.value?.state === 'running' || job.value?.state === 'cancelling')
-const missing = computed(() => (sceneSplat.value ? sceneSplat.value.n_total - sceneSplat.value.n_ready : 0))
-const progressPct = computed(() => Math.round((job.value?.progress ?? 0) * 100))
 const sizeMb = computed(() => ((splatStatus.value?.ply_bytes ?? 0) / 1e6).toFixed(0))
 </script>
 
@@ -179,34 +175,14 @@ const sizeMb = computed(() => ((splatStatus.value?.ply_bytes ?? 0) / 1e6).toFixe
   <section class="cloud">
     <div class="host" ref="host"></div>
 
-    <div class="banner" v-if="splatStatus?.state === 'running' || splatStatus?.state === 'queued'">
-      <div class="title">
-        <template v-if="splatStatus.state === 'running'">Building this keyframe</template>
-        <template v-else>Queued: building {{ job?.label }}, keyframe {{ (job?.index ?? 0) + 1 }} of {{ job?.total }}</template>
-      </div>
-      <div class="muted">{{ job?.message }}</div>
-      <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
-      <div class="actions"><button class="secondary" @click="cancelSplatBuild" :disabled="job?.state === 'cancelling'">Stop</button></div>
+    <div class="banner" v-if="splatStatus?.state === 'missing'">
+      <div class="title">No splat computed for this keyframe</div>
+      <div class="muted">Splats are computed offline and read from the cache. {{ sceneSplat?.n_ready ?? 0 }} of {{ sceneSplat?.n_total ?? 0 }} keyframes of this scene have one for these options.</div>
+      <pre class="cmd">{{ splatStatus.message?.replace(/^.*offline: /, '') }}</pre>
     </div>
-    <div class="banner" v-else-if="splatStatus?.state === 'missing'">
-      <div class="title">No splat built for this keyframe</div>
-      <template v-if="jobActive">
-        <div class="muted">Building {{ job?.label }}, keyframe {{ (job?.index ?? 0) + 1 }} of {{ job?.total }}. Builds run one at a time.</div>
-        <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
-      </template>
-      <template v-else>
-        <div class="muted">Splats are built on request, never during playback. Build this keyframe, or the whole scene so you can play it.</div>
-        <div class="actions">
-          <button class="primary" @click="startSplatBuild('scene')">Build {{ missing }} missing keyframe{{ missing === 1 ? '' : 's' }}</button>
-          <button class="secondary" @click="startSplatBuild('keyframe')">This keyframe only</button>
-        </div>
-        <div class="hint muted">About 5 s per keyframe on the Apple GPU, plus one model load per build.</div>
-      </template>
-    </div>
-    <div class="banner error" v-else-if="splatStatus?.state === 'error' || loadError || splatBuildError">
-      <div class="title">The splat could not be built</div>
-      <div>{{ splatStatus?.message || loadError || splatBuildError }}</div>
-      <pre v-if="splatStatus?.tail?.length" class="tail">{{ splatStatus.tail.join('\n') }}</pre>
+    <div class="banner error" v-else-if="splatStatus?.state === 'error' || loadError">
+      <div class="title">The splat could not be loaded</div>
+      <div>{{ splatStatus?.message || loadError }}</div>
     </div>
     <div class="banner" v-else-if="state.loadingSplat"><div class="title">Loading {{ sizeMb }} MB of Gaussians</div></div>
 
@@ -283,26 +259,14 @@ const sizeMb = computed(() => ((splatStatus.value?.ply_bytes ?? 0) / 1e6).toFixe
   opacity: 0.5;
   cursor: default;
 }
-.tail {
-  margin: 8px 0 0;
-  font-size: 11px;
+.cmd {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  font-size: 12px;
   white-space: pre-wrap;
-  color: var(--muted);
-  max-height: 120px;
-  overflow: auto;
-}
-.bar {
-  margin-top: 8px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--line);
-  overflow: hidden;
-}
-.bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 300ms;
+  background: var(--ground);
+  border-radius: var(--radius);
+  user-select: all;
 }
 .hud {
   position: absolute;

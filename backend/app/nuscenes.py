@@ -96,6 +96,7 @@ class NuScenes:
             t: {r["token"]: r for r in rows} for t, rows in self.table.items()
         }
         self._index()
+        self._keep_scenes_on_disk()
 
     def get(self, table: str, token: str) -> dict:
         return self.by_token[table][token]
@@ -129,6 +130,17 @@ class NuScenes:
                 samples.append(sample)
                 token = sample["next"]
             self.samples_of_scene[scene["token"]] = samples
+
+    def _keep_scenes_on_disk(self) -> None:
+        """The tables list every scene of the split, but a data bundle may
+        carry the files of only a few. Keep the scenes whose keyframes exist."""
+        def present(scene: dict) -> bool:
+            first = self.samples_of_scene[scene["token"]][0]
+            sd = self.keyframe_sd[first["token"]]["CAM_FRONT"]
+            return (self.dataroot / sd["filename"]).exists()
+
+        self.table["scene"] = [s for s in self.table["scene"] if present(s)]
+        self.by_token["scene"] = {s["token"]: s for s in self.table["scene"]}
 
     # ----- scenes -------------------------------------------------------
 

@@ -40,7 +40,7 @@ function toggleCamera(ch: string) {
   <aside class="inspector">
     <section>
       <h2>Model</h2>
-      <p class="lead" v-if="d">{{ d.model.model }}, stock weights, no fine tuning. Runs on {{ d.model.device === 'mps' ? 'the Apple GPU' : d.model.device }} in about {{ d.model.last_inference_s ? Math.round(d.model.last_inference_s * 1000) : '200' }} ms per image.</p>
+      <p class="lead" v-if="d">{{ d.model.model }}, stock weights, no fine tuning, about 200 ms per image on an Apple GPU. Predictions are computed offline and read from the cache.</p>
       <p class="note muted">
         The model predicts relative inverse depth: which pixels are nearer, not how many metres away. To compare with lidar, each image gets its own scale and shift fitted by least squares to the lidar points that project into it. Everything below is measured after that fit, so it is the best case for the stock model.
       </p>

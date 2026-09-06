@@ -3,17 +3,20 @@ import { computed } from 'vue'
 import { state, viewLock } from '../state'
 
 const lock = computed(() => viewLock(state.view))
-const sizes: Record<string, string> = { depth: 'about 1 GB', splat: 'about 9 GB' }
-const names: Record<string, string> = { depth: 'Depth Anything V2 checkpoint and its cached predictions', splat: 'Depth Anything 3 checkpoint and the cached splats' }
+const names: Record<string, string> = {
+  depth: 'Depth Anything V2 predictions for every keyframe camera image',
+  fusion: 'fused meshes of each scene from camera depth and from lidar',
+  splat: 'Depth Anything 3 Gaussian splats of every keyframe',
+}
 </script>
 
 <template>
   <section class="locked" v-if="lock">
     <div class="card">
       <h2>This view needs the {{ lock.name }} bundle</h2>
-      <p>{{ names[lock.name] }}, {{ sizes[lock.name] }}. Fetch it from the repository's releases, then restart the backend:</p>
+      <p>The cache has no {{ names[lock.name] }} for any scene. Fetch the bundle from the repository's releases, then restart the backend:</p>
       <pre>{{ lock.make }}</pre>
-      <p class="muted">The backend looked for {{ lock.path }}. See README, Data, for the bundles and what each one unlocks.</p>
+      <p class="muted">Or compute the results yourself with the compute CLI. See README, Data, for the bundles and what each one unlocks.</p>
     </div>
   </section>
 </template>

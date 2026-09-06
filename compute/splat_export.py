@@ -1,33 +1,20 @@
-"""Run Depth Anything 3 on the cameras of nuScenes keyframes and export one
-Gaussian splat per keyframe, each in the ego frame of its keyframe.
+"""Gaussian splats from Depth Anything 3, one per nuScenes keyframe, each in
+the ego frame of its keyframe. cli.py loads the model once and calls
+export_sample for every keyframe of a scene.
 
-    uv run python splat_export.py --samples <token> [<token> ...] --out <dir> [--views 6|18] [--unposed]
-
-The 6.8 GB model loads once per process, so pass a whole scene at a time.
-Keyframes whose stats file already exists are skipped.
-
-Runs in its own environment (see pyproject.toml) because DA3 pins numpy<2.
-Only numpy and the JSON tables are shared with the backend, through
-backend/app/nuscenes.py; the output key comes from backend/app/splat.py so both
-sides name the files the same way.
-
-Outputs per keyframe, all named <key>.*:
+Outputs per keyframe, named by app.splat.splat_key:
   .ply    3DGS-format Gaussians (Spark, SuperSplat, etc. read it)
   .npz    metric depth, sky mask and confidence per view, float16
   .json   stats: per-view depth error against lidar, pose error when
-          unposed, Gaussian count, timings
-
---progress names a JSON file rewritten at every step of the batch so the
-backend can report which keyframe is being built and how far along it is.
+          unposed, Gaussian count, timings; written last, so its presence
+          marks the keyframe as done
 """
 
 from __future__ import annotations
 
-import argparse
 import gc
 import json
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -36,48 +23,25 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import numpy as np
 import torch
-from PIL import Image
 from plyfile import PlyData, PlyElement
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "backend"))
-from app.nuscenes import CAMERA_CHANNELS, NuScenes, apply  # noqa: E402
-from app.splat import splat_key  # noqa: E402
-
-DEFAULT_MODEL = ROOT / "data" / "models" / "da3" / "DA3NESTED-GIANT-LARGE-1.1"
-DEFAULT_DATAROOT = ROOT / "data" / "nuscenes"
+from app.nuscenes import CAMERA_CHANNELS, NuScenes, apply
 
 MIN_DEPTH, MAX_DEPTH = 1.0, 80.0
 
 
 class Progress:
-    """Progress of the whole batch, as one JSON file the backend polls."""
+    """Prints the step of the current keyframe; cli.py sets the keyframe."""
 
-    def __init__(self, path: Path | None, total: int):
-        self.path = path
+    def __init__(self, total: int):
         self.total = total
         self.index = 0
-        self.current: dict | None = None
 
-    def keyframe(self, index: int, token: str, key: str) -> None:
+    def keyframe(self, index: int) -> None:
         self.index = index
-        self.current = {"token": token, "key": key}
-
-    def finish(self) -> None:
-        self.index = self.total
-        self.current = None
-        self.log(0.0, "done")
 
     def log(self, local: float, msg: str) -> None:
-        """local is the progress of the current keyframe, 0 to 1."""
-        overall = (self.index + local) / max(self.total, 1)
-        if self.path:
-            self.path.write_text(json.dumps({
-                "progress": round(overall, 3), "message": msg,
-                "index": self.index, "total": self.total, "current": self.current,
-            }))
-        where = f"{self.index + 1}/{self.total} " if self.current else ""
-        print(f"[{overall * 100:5.1f}%] {where}{msg}", flush=True)
+        print(f"  [{self.index + 1}/{self.total} {local * 100:3.0f}%] {msg}", flush=True)
 
 
 def pick_device() -> torch.device:
@@ -117,22 +81,6 @@ def quat_mul_wxyz(q: np.ndarray, r: np.ndarray) -> np.ndarray:
         w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
         w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
     ], axis=1)
-
-
-def umeyama(src: np.ndarray, dst: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
-    """Similarity (s, R, t) with dst ~ s R src + t."""
-    mu_s, mu_d = src.mean(0), dst.mean(0)
-    xs, xd = src - mu_s, dst - mu_d
-    cov = xd.T @ xs / len(src)
-    U, D, Vt = np.linalg.svd(cov)
-    S = np.eye(3)
-    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
-        S[2, 2] = -1
-    R = U @ S @ Vt
-    var_s = (xs ** 2).sum() / len(src)
-    s = float((D * np.diag(S)).sum() / var_s)
-    t = mu_d - s * R @ mu_s
-    return s, R, t
 
 
 def rotation_error_deg(Ra: np.ndarray, Rb: np.ndarray) -> float:
@@ -420,50 +368,3 @@ def export_sample(nusc: NuScenes, model, adapter_inputs: dict, device: torch.dev
     }
     # written last: its presence is what marks the keyframe as built
     (out / f"{key}.json").write_text(json.dumps(meta))
-
-
-# ----- main --------------------------------------------------------------
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--samples", required=True, nargs="+", help="nuScenes sample tokens of the keyframes")
-    ap.add_argument("--out", required=True, help="output directory")
-    ap.add_argument("--progress", help="JSON file rewritten at every step of the batch")
-    ap.add_argument("--views", type=int, default=6, choices=(6, 18), help="6: this keyframe; 18: with its neighbours")
-    ap.add_argument("--unposed", action="store_true", help="let DA3 estimate the camera poses instead of using calibration")
-    ap.add_argument("--res", type=int, default=504, help="DA3 processing resolution (long side)")
-    ap.add_argument("--scale-mult", type=float, default=0.7, help="multiply every Gaussian's size; below 1 is crisper with more gaps")
-    ap.add_argument("--model", default=str(DEFAULT_MODEL))
-    ap.add_argument("--dataroot", default=str(DEFAULT_DATAROOT))
-    args = ap.parse_args()
-
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    posed = not args.unposed
-    todo = [(tok, splat_key(tok, args.views, posed)) for tok in args.samples]
-    todo = [(tok, key) for tok, key in todo if not (out / f"{key}.json").exists()]
-    progress = Progress(Path(args.progress) if args.progress else None, len(todo))
-    if not todo:
-        progress.log(1.0, "nothing to build")
-        return
-
-    progress.log(0.0, "loading nuScenes tables")
-    nusc = NuScenes(Path(args.dataroot))
-
-    device = pick_device()
-    progress.log(0.0, "loading Depth Anything 3 (1.4B parameters)")
-    t0 = time.perf_counter()
-    model, adapter_inputs = load_model(args.model, device)
-    t_load = time.perf_counter() - t0
-
-    for i, (tok, key) in enumerate(todo):
-        progress.keyframe(i, tok, key)
-        export_sample(nusc, model, adapter_inputs, device, progress, tok, key, out,
-                      args.views, args.unposed, args.res, args.scale_mult, t_load)
-        free_memory(device)
-    progress.finish()
-
-
-if __name__ == "__main__":
-    main()

@@ -37,6 +37,11 @@ function pick(token: string) {
                 <span>{{ s.duration_s.toFixed(0) }} s</span>
                 <span>{{ s.nbr_instances }} objects</span>
               </div>
+              <div class="features">
+                <span class="feat" :class="{ on: s.features.depth }" title="Depth Anything results in the cache">depth</span>
+                <span class="feat" :class="{ on: s.features.fusion }" title="Fused meshes in the cache">mesh</span>
+                <span class="feat" :class="{ on: s.features.splat }" title="Gaussian splats in the cache">splat</span>
+              </div>
               <div class="depth num" v-if="state.view === 'depth'">
                 <template v-if="depthScenes[s.token]">
                   <span class="bar"><i :style="{ width: Math.min(100, depthScenes[s.token].abs_rel * 300) + '%' }"></i></span>
@@ -182,5 +187,23 @@ h2 {
   height: 100%;
   background: var(--radar);
   border-radius: 2px;
+}
+.features {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.feat {
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+.feat.on {
+  opacity: 1;
+  text-decoration: none;
+  border-color: var(--line-strong);
 }
 </style>

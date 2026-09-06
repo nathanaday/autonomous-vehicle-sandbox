@@ -1,5 +1,5 @@
 import { reactive, shallowRef, watch } from 'vue'
-import { api, type BundleInfo, type BundleName, type Bundles, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
+import { api, type DepthFrame, type FeatureInfo, type FeatureName, type Features, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
 export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat'
@@ -70,15 +70,15 @@ export const state = reactive({
   loadingSplat: false,
 })
 
-/** Data bundles on the backend's disk; null until loaded. */
-export const bundles = shallowRef<Bundles | null>(null)
+/** Features with results in the backend's cache; null until loaded. */
+export const features = shallowRef<Features | null>(null)
 
-/** The missing bundle that locks a view, or null when the view is available. */
-export function viewLock(view: ViewMode): (BundleInfo & { name: BundleName }) | null {
-  const b = bundles.value
-  if (!b) return null
-  for (const name of Object.keys(b) as BundleName[]) {
-    const info = b[name]
+/** The feature without results that locks a view, or null when the view is available. */
+export function viewLock(view: ViewMode): (FeatureInfo & { name: FeatureName }) | null {
+  const f = features.value
+  if (!f) return null
+  for (const name of Object.keys(f) as FeatureName[]) {
+    const info = f[name]
     if (!info.present && info.views.includes(view)) return { ...info, name }
   }
   return null
@@ -129,23 +129,21 @@ watch(
   { immediate: true },
 )
 
-/** Build status of the fused mesh for the current scene and settings. The
- *  backend builds on first request; we poll until it is ready. */
+/** The fused mesh for the current scene and settings: its stats when the
+ *  cache has it, else 'missing' with the compute command. */
 export const fusionStatus = shallowRef<FusionStatus | null>(null)
-let fusionPoll = 0
+let fusionRequest = 0
 
-async function pollFusion() {
-  const id = ++fusionPoll
+async function loadFusion() {
+  const id = ++fusionRequest
   const scene = state.scene
   if (!scene || state.view !== 'fusion') return
   const { source, voxel, maskMoving } = fusionLayers
   try {
     const s = await api.fusionStatus(scene.token, source, voxel, maskMoving)
-    if (id !== fusionPoll) return
-    fusionStatus.value = s
-    if (s.state === 'running') window.setTimeout(() => id === fusionPoll && pollFusion(), 1500)
+    if (id === fusionRequest) fusionStatus.value = s
   } catch (e) {
-    if (id === fusionPoll) fusionStatus.value = { key: '', state: 'error', message: String(e) }
+    if (id === fusionRequest) fusionStatus.value = { key: '', state: 'error', message: String(e) }
   }
 }
 
@@ -153,35 +151,26 @@ watch(
   () => [state.view, state.scene?.token, fusionLayers.source, fusionLayers.voxel, fusionLayers.maskMoving] as const,
   ([view]) => {
     fusionStatus.value = null
-    if (view === 'fusion') pollFusion()
+    if (view === 'fusion') loadFusion()
   },
   { immediate: true },
 )
 
 /** Which keyframes of the current scene have a Gaussian splat for the chosen
- *  options, and the build job if one runs. Splats are never built by
- *  looking at them: a build starts only from startSplatBuild, and the
- *  backend runs one at a time. We poll while a job is active. */
+ *  options. Nothing here computes: the cache is filled offline by compute/. */
 export const sceneSplat = shallowRef<SceneSplatStatus | null>(null)
-export const splatBuildError = shallowRef<string | null>(null)
-let sceneSplatPoll = 0
+let sceneSplatRequest = 0
 
-function jobActive(s: SceneSplatStatus | null) {
-  return s?.job?.state === 'running' || s?.job?.state === 'cancelling'
-}
-
-async function pollSceneSplat() {
-  const id = ++sceneSplatPoll
+async function loadSceneSplat() {
+  const id = ++sceneSplatRequest
   const scene = state.scene
   if (!scene || state.view !== 'splat') return
   const { views, posed } = splatLayers
   try {
     const s = await api.sceneSplat(scene.token, views, posed)
-    if (id !== sceneSplatPoll) return
-    sceneSplat.value = s
-    if (jobActive(s)) window.setTimeout(() => id === sceneSplatPoll && pollSceneSplat(), 1500)
+    if (id === sceneSplatRequest) sceneSplat.value = s
   } catch (e) {
-    if (id === sceneSplatPoll) splatBuildError.value = String(e)
+    if (id === sceneSplatRequest) sceneSplat.value = null
   }
 }
 
@@ -189,37 +178,12 @@ watch(
   () => [state.view, state.scene?.token, splatLayers.views, splatLayers.posed] as const,
   ([view]) => {
     sceneSplat.value = null
-    splatBuildError.value = null
-    if (view === 'splat') pollSceneSplat()
+    if (view === 'splat') loadSceneSplat()
   },
   { immediate: true },
 )
 
-/** Build the splats the scene is missing, or only the current keyframe's. */
-export async function startSplatBuild(scope: 'scene' | 'keyframe') {
-  const scene = state.scene
-  const f = frame.value
-  if (!scene || !f) return
-  const { views, posed } = splatLayers
-  splatBuildError.value = null
-  try {
-    sceneSplat.value = scope === 'scene' ? await api.buildSceneSplat(scene.token, views, posed) : await api.buildSampleSplat(f.detail.token, views, posed)
-  } catch (e) {
-    splatBuildError.value = String(e)
-  }
-  pollSceneSplat()
-}
-
-export async function cancelSplatBuild() {
-  try {
-    await api.cancelSplat()
-  } catch (e) {
-    splatBuildError.value = String(e)
-  }
-  pollSceneSplat()
-}
-
-/** The current keyframe's splat: its stats when built, else its state. */
+/** The current keyframe's splat: its stats when computed, else 'missing'. */
 export const splatStatus = shallowRef<SplatStatus | null>(null)
 let splatRequest = 0
 
@@ -233,10 +197,7 @@ watch(
       return
     }
     if (!kf.ready) {
-      const job = scene.job
-      const inJob = jobActive(scene) && job!.keys.includes(kf.key)
-      const where = !inJob ? 'missing' : job!.current?.key === kf.key ? 'running' : 'queued'
-      splatStatus.value = { key: kf.key, state: where, progress: job?.progress, message: job?.message }
+      splatStatus.value = { key: kf.key, state: 'missing', message: scene.message }
       return
     }
     if (splatStatus.value?.key === kf.key && splatStatus.value.state === 'ready') return
@@ -350,9 +311,9 @@ function writeHash() {
 watch([frame, () => state.lightboxCamera, () => state.view], writeHash)
 
 export async function loadScenes() {
-  const [scenes, b] = await Promise.all([api.scenes(), api.bundles()])
+  const [scenes, f] = await Promise.all([api.scenes(), api.features()])
   state.scenes = scenes
-  bundles.value = b
+  features.value = f
   if (!state.scenes.length || state.scene) return
   const h = readHash()
   const scene = state.scenes.find((s) => s.name === h.name) ?? state.scenes[0]

@@ -3,14 +3,14 @@
 # into data/. Safe to rerun: finished downloads are resumed or skipped, and a
 # bundle already on disk is left alone.
 #
-#   scripts/sync_data.sh                  # the dataset bundle, required
-#   scripts/sync_data.sh depth splat      # the optional bundles
-#   KEEP_PARTS=1 scripts/sync_data.sh     # keep the downloaded parts afterwards
+#   scripts/sync_data.sh                      # the dataset bundle, required
+#   scripts/sync_data.sh depth fusion splat   # the optional bundles, one per feature
+#   KEEP_PARTS=1 scripts/sync_data.sh         # keep the downloaded parts afterwards
 #
-# Bundles, from data.manifest: dataset (nuScenes v1.0-mini), depth (Depth
-# Anything V2 checkpoint, depth and fusion caches), splat (Depth Anything 3
-# checkpoint, splat cache). Needs curl and shasum (macOS) or sha256sum (Linux),
-# and free disk of about twice a bundle's size while it extracts.
+# Bundles, from data.manifest: dataset (nuScenes v1.0-mini, three scenes,
+# keyframes only), depth, fusion and splat (the precomputed results of each
+# feature for those scenes). Needs curl and shasum (macOS) or sha256sum
+# (Linux), and free disk of about twice a bundle's size while it extracts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,13 +24,14 @@ if command -v shasum >/dev/null; then sha() { shasum -a 256 "$1" | cut -d' ' -f1
 elif command -v sha256sum >/dev/null; then sha() { sha256sum "$1" | cut -d' ' -f1; }
 else echo "shasum or sha256sum is required" >&2; exit 1; fi
 
-# A file whose presence means the bundle is installed.
+# A path whose presence means the bundle is installed.
 marker() {
   case "$1" in
     dataset) echo "nuscenes/v1.0-mini/scene.json" ;;
-    depth) echo "models/depth-anything-v2/depth_anything_v2_vitb.pth" ;;
-    splat) echo "models/da3/DA3NESTED-GIANT-LARGE-1.1/model.safetensors" ;;
-    *) echo "unknown bundle '$1'; choose from dataset, depth, splat" >&2; exit 1 ;;
+    depth) echo "cache/depth" ;;
+    fusion) echo "cache/fusion" ;;
+    splat) echo "cache/splat" ;;
+    *) echo "unknown bundle '$1'; choose from dataset, depth, fusion, splat" >&2; exit 1 ;;
   esac
 }
 

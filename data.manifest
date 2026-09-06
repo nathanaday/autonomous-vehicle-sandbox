@@ -2,15 +2,13 @@
 # Regenerate a bundle with scripts/bundle_data.sh <tag> <bundle>.
 # bundle <name> <archive> <sha256> <bytes> <release url>
 # part <name> <file> <sha256> <bytes>
-bundle dataset av-sandbox-dataset.tar.gz ca9f5ec3f7336cf25290314124c4910c82aea8ec041ad8eaa10c7d0ffb1d3e40 4333345697 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
-part dataset av-sandbox-dataset.tar.gz.part-aa 9bb7b2a537a137edec11571b6a5b655158b764794baef0dc7c48c24a97f5c528 1992294400
-part dataset av-sandbox-dataset.tar.gz.part-ab 06cd6125f705a18a0c8a3849cd62fd2d064fe17e166c24a26072b43451ea5911 1992294400
-part dataset av-sandbox-dataset.tar.gz.part-ac 2826e532d8fd22c34d48fb2d5a51ff6954a3aa4f56c77e608c2b50952710024d 348756897
-bundle depth av-sandbox-depth.tar.gz 57c29f1548db2dff3e967343342b1f851540ced731704a3b2fa39e5a9465694e 724139580 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
-part depth av-sandbox-depth.tar.gz.part-aa 57c29f1548db2dff3e967343342b1f851540ced731704a3b2fa39e5a9465694e 724139580
-bundle splat av-sandbox-splat.tar.gz 7d4259d031e9ddcabf8df0024f21a5bca6425ffd9112e310849dd43371ab72f6 8931998782 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
-part splat av-sandbox-splat.tar.gz.part-aa 4cd26a0a75693afe9548e908dc5251b0ee0b8fb8b9c57f545f5f7bcc60a36002 1992294400
-part splat av-sandbox-splat.tar.gz.part-ab 93bf827140408bbba4fdb54b6c2893726eeda2d1fd0a1ae5551a4959702a1c89 1992294400
-part splat av-sandbox-splat.tar.gz.part-ac 604717a05445e685a0377cf25b980f23d89797c3ef756932abfb613f8783982a 1992294400
-part splat av-sandbox-splat.tar.gz.part-ad 95b81db847617a449010c2cefed385dc7c644d5bbeb4de582120f4f505ba592a 1992294400
-part splat av-sandbox-splat.tar.gz.part-ae 0bc9b79e2850e7917567571332d7074c7d9d86557443b6259128819530f51496 962821182
+bundle dataset av-sandbox-dataset.tar.gz 868c9462bdce1f5116b25c56a1f4c5e8afda6559bdc4a4b69ae27c0a6674124a 193302205 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part dataset av-sandbox-dataset.tar.gz.part-aa 868c9462bdce1f5116b25c56a1f4c5e8afda6559bdc4a4b69ae27c0a6674124a 193302205
+bundle depth av-sandbox-depth.tar.gz a6045dda3a5dc7401dfbe67f6b3608093a20a0a5726d6e532395e83d1db8aa32 86687102 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part depth av-sandbox-depth.tar.gz.part-aa a6045dda3a5dc7401dfbe67f6b3608093a20a0a5726d6e532395e83d1db8aa32 86687102
+bundle fusion av-sandbox-fusion.tar.gz 7ba767c2fd6f7cb13d7c5d149a31201ba8117c397c451667240c2604f011058e 688049861 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part fusion av-sandbox-fusion.tar.gz.part-aa 7ba767c2fd6f7cb13d7c5d149a31201ba8117c397c451667240c2604f011058e 688049861
+bundle splat av-sandbox-splat.tar.gz 5ca7efe88178264972f633fdaa034c2822763f217bbe83179c93ecbae094132e 4008929076 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v2
+part splat av-sandbox-splat.tar.gz.part-aa 0a6250016c06ce34f2846fc56c380d3eea656378e49b6f3731c0d9cc3656582c 1992294400
+part splat av-sandbox-splat.tar.gz.part-ab 953bb119b09c054aeff868fde271c4a20cfbb6abdff88e9b030f206cea9868fc 1992294400
+part splat av-sandbox-splat.tar.gz.part-ac d0d95e0064e4199b0c46981b453a22ebc05f40464468f30df19a2282096cf7cf 24340276

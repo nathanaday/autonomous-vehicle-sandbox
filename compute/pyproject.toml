@@ -1,13 +1,16 @@
 [project]
-name = "av-sandbox-da3"
+name = "av-sandbox-compute"
 version = "0.1.0"
-description = "Runs Depth Anything 3 on nuScenes keyframes and exports Gaussian splats. Separate environment because DA3 pins numpy<2."
+description = "Offline compute for the viewer: Depth Anything V2 depth, TSDF fusion and Depth Anything 3 splats, written to data/cache."
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "depth-anything-3 @ git+https://github.com/ByteDance-Seed/Depth-Anything-3@3d835ec1a5802d64a8b8b15f817a1ab54809bfe4",
     "torch>=2.4",
     "torchvision",
     "numpy<2",
+    "open3d>=0.19",
+    "scipy",
+    "pillow",
     "plyfile",
     "safetensors",
     "huggingface_hub",
