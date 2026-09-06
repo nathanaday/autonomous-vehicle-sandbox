@@ -1,24 +1,28 @@
 # nuScenes sandbox
 
-A viewer for the nuScenes `v1.0-mini` split. Pick a scene, step through its keyframes, and see every sensor at once: the six cameras, the lidar sweep, the five radars, the annotated 3D boxes, and the path the car drove. 
+This is a data viewer for the nuScenes `v1.0-mini` split. My goal was to create a platform to explore the nuScenes data set, and visualze a few post-processing layers one may want to explore: DepthAnything, Scene Fusion, and Gaussian Splatting.
 
-The project has two sides:
+---
 
+# Repository Components
 
-### Data Viewer
+### (1/2) Data Viewer Environment
 
 ![Night scene after rain](docs/screenshot.jpg)
 
+> All precomputed data is available in the `releases` section and can be downloaded with the provided `make` files. 
+
+This is all you need to get started!
 
 The viewer stack, `backend/` and `frontend/`, reads the dataset and precomputed results. Therefore, no models or heavy computations on device are required. 
 
-> All precomputed data is available in the `releases` section and can be downloaded with the provided `make` files.
+### (2/2) Data Computation Environment
 
-### Compute Data For New Scenes
+This part is optional. If you want to run new computations (depth, gaussians, etc.), you can download the corresponding models and use the `compute/` environment.
 
-Optionally, if you want to run new computations (depth, gaussians, etc.), you can download the corresponding models and use the `compute/` environment.
+---
 
-## Quickstart
+## Quick Start
 
 ### Requirements
 
@@ -79,6 +83,7 @@ make demo
 
 > For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
 
+---
 
 # Provided Views
 
@@ -86,9 +91,7 @@ make demo
 
 ![Depth view, night scene, top-down by camera](docs/depth-view.jpg)
 
-The second view shows stock Depth Anything V2 (ViT-B, no fine tuning) run on all
-six cameras and puts the result next to the lidar. It is the baseline for
-both project directions in `depth-anything-av-application.md`.
+The second view shows stock Depth Anything V2 (ViT-B, no fine tuning) run on all six cameras and puts the result next to the lidar. 
 
 - **Camera tiles.** A wipe between photo and depth map, the depth map alone,
   or the lidar points drawn on the photo and colored by how far the model
@@ -191,20 +194,6 @@ about three and a half minutes on an Apple GPU, and its `--views 18` and
 Anything 3 checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
 the DA3 code installed by pip are Apache 2.0.
 
+---
 
 Details on the data bundles and how the pieces fit together are in [DETAILS.md](DETAILS.md).
-
-## What the mini split contains
-
-| | |
-|---|---|
-| Scenes | 10, about 20 s each, 39 to 41 keyframes at 2 Hz |
-| Locations | Boston Seaport, Singapore One North, Queenstown, Holland Village |
-| Conditions | 3 night scenes, 1 tagged after rain, the rest clear daytime |
-| Cameras | 6 at 1600×900, 12 Hz, about 65° horizontal fov each, 89° for the back camera |
-| Lidar | 1 at 20 Hz, 32 beams, about 35 000 points per sweep |
-| Radar | 5 at 13 Hz, about 125 raw returns each, 20 to 80 after filtering |
-| Annotations | 3D boxes at every keyframe, 23 categories, with per-box lidar and radar point counts |
-
-Only keyframes are shown. The `sweeps/` folder holds the intermediate
-frames at full sensor rate; the API does not expose them yet.
