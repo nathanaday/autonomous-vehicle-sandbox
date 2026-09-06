@@ -41,6 +41,7 @@ export const state = reactive({
   playing: false,
   fps: 2,
   lightboxCamera: null as string | null,
+  scenePickerOpen: false,
   hoveredAnnotation: null as string | null,
   view: 'explore' as ViewMode,
   loadingDepth: false,

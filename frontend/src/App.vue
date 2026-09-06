@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import SceneRail from './components/SceneRail.vue'
+import ScenePicker from './components/ScenePicker.vue'
 import SceneHeader from './components/SceneHeader.vue'
 import CameraGrid from './components/CameraGrid.vue'
 import PointCloudView from './components/PointCloudView.vue'
@@ -19,7 +19,10 @@ function onKey(e: KeyboardEvent) {
   else if (e.key === ' ') {
     e.preventDefault()
     state.playing = !state.playing
-  } else if (e.key === 'Escape') state.lightboxCamera = null
+  } else if (e.key === 'Escape') {
+    state.lightboxCamera = null
+    state.scenePickerOpen = false
+  } else if (e.key === 's') state.scenePickerOpen = !state.scenePickerOpen
 }
 
 onMounted(() => {
@@ -31,7 +34,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 <template>
   <div class="shell">
-    <SceneRail class="rail" />
     <main class="main">
       <SceneHeader />
       <!-- Only one view is mounted at a time so its WebGL context and
@@ -53,23 +55,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <Timeline />
     </main>
     <CameraLightbox v-if="state.lightboxCamera && state.view === 'explore'" />
+    <ScenePicker v-if="state.scenePickerOpen" />
     <div v-if="state.error" class="error">{{ state.error }}</div>
   </div>
 </template>
 
 <style scoped>
 .shell {
-  display: grid;
-  grid-template-columns: var(--rail-w) 1fr;
   height: 100%;
-}
-.rail {
-  border-right: 1px solid var(--line);
-  min-height: 0;
 }
 .main {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  height: 100%;
   min-width: 0;
   min-height: 0;
 }
@@ -106,12 +104,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   border-radius: var(--radius);
 }
 @media (max-width: 1100px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-  .rail {
-    display: none;
-  }
   .stage {
     grid-template-columns: 1fr;
   }

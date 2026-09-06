@@ -11,7 +11,9 @@ research context.
 
 ## Layout
 
-- **Scene rail.** The ten scenes, tagged `night` and `rain` from their
+- **Header.** The current scene's name, tags, location, date, and
+  description. The Change scene button (or `s`) opens a picker with all ten
+  scenes as thumbnail cards, tagged `night` and `rain` from their
   descriptions, with keyframe count, duration, and number of annotated
   objects.
 - **Camera grid.** The six cameras in their physical arrangement, front row
