@@ -182,6 +182,34 @@ export interface SceneDepthSummary {
   delta1: number
 }
 
+export type FusionSource = 'camera' | 'lidar'
+
+export interface FusionPose {
+  token: string
+  ego_to_scene: Mat4
+}
+
+export interface FusionStatus {
+  key: string
+  state: 'running' | 'ready' | 'error'
+  progress?: number
+  message?: string
+  scene_token?: string
+  source?: FusionSource
+  voxel?: number
+  mask_moving?: boolean
+  moving_instances?: number
+  keyframes?: number
+  views?: number
+  vertices?: number
+  triangles?: number
+  raw_triangles?: number
+  seconds?: number
+  bounds_min?: number[]
+  bounds_max?: number[]
+  poses?: FusionPose[]
+}
+
 export const DEPTH_CLOUD_STRIDE = 7
 export const DEPTH_LIDAR_STRIDE = 5
 
@@ -220,6 +248,9 @@ export const api = {
     return { detail, cloud, lidar }
   },
   sceneDepth: (token: string) => getJson<SceneDepthSummary>(`/api/scenes/${token}/depth`),
+  fusionStatus: (token: string, source: FusionSource, voxel: number, mask: boolean) =>
+    getJson<FusionStatus>(`/api/scenes/${token}/fusion?source=${source}&voxel=${voxel}&mask=${mask}`),
+  fusionMeshUrl: (key: string) => `/api/fusion/${key}.ply`,
   depthImageUrl: (sdToken: string, width?: number) =>
     width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,
 }

@@ -13,6 +13,7 @@ const date = computed(() => {
 const views: { id: ViewMode; label: string; hint: string }[] = [
   { id: 'explore', label: 'Sensors', hint: 'Every sensor in the raw dataset' },
   { id: 'depth', label: 'Depth Anything', hint: 'Stock monocular depth against the lidar' },
+  { id: 'fusion', label: 'Fused mesh', hint: 'The whole scene fused into one surface' },
 ]
 
 function setView(v: ViewMode) {

@@ -1,13 +1,14 @@
-import { onMounted, onUnmounted, ref, type Ref } from 'vue'
+import { onMounted, onUnmounted, ref, shallowRef, type Ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { COLORS } from '../geometry'
 
 export type ViewPreset = 'chase' | 'top' | 'side'
 
-/** Ground level in the ego frame: the lidar sits 1.84 m up and the frame
- *  origin is on the rear axle, so the road is about 1.75 m below the origin. */
-export const GROUND_Z = -1.75
+/** Ground level in the ego frame. The nuScenes ego origin is the rear axle
+ *  centre projected onto the road, so the road is at z = 0; the lidar sweeps
+ *  put it between -0.4 and 0 m. Rings sit a little lower to avoid z-fighting. */
+export const GROUND_Z = -0.08
 
 /** Shared Three.js scaffolding for views drawn in the nuScenes ego frame:
  *  x forward, y left, z up. Owns the renderer, orbit controls, resize, the
@@ -27,6 +28,7 @@ export function useThreeScene(host: Ref<HTMLElement | null>) {
 
   let renderer: THREE.WebGLRenderer | null = null
   let controls: OrbitControls | null = null
+  const controlsRef = shallowRef<OrbitControls | null>(null)
   let raf = 0
   let ro: ResizeObserver | null = null
 
@@ -58,6 +60,7 @@ export function useThreeScene(host: Ref<HTMLElement | null>) {
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio))
     el.appendChild(renderer.domElement)
     controls = new OrbitControls(camera, renderer.domElement)
+    controlsRef.value = controls
     controls.enableDamping = true
     controls.dampingFactor = 0.12
     controls.maxDistance = 300
@@ -93,7 +96,7 @@ export function useThreeScene(host: Ref<HTMLElement | null>) {
     renderer = null
   })
 
-  return { scene, camera, rings, ego, preset, setView }
+  return { scene, camera, controls: controlsRef, rings, ego, preset, setView }
 }
 
 function buildRings(group: THREE.Group) {
@@ -110,10 +113,17 @@ function buildRings(group: THREE.Group) {
   group.add(new THREE.Line(axis, new THREE.LineBasicMaterial({ color: '#1f2a38' })))
 }
 
+/** Outline of the ego car in its own frame. Renault Zoe footprint: 4.1 m
+ *  long, 1.85 m wide, body from 0.25 m to 1.55 m above the road, rear axle
+ *  1.25 m behind the car's centre. */
+export function egoOutline(opacity = 0.7): THREE.LineSegments {
+  const box = new THREE.BoxGeometry(4.1, 1.85, 1.3)
+  box.translate(1.25, 0, 0.9)
+  return new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: COLORS.ego, transparent: true, opacity }))
+}
+
 function buildEgo(group: THREE.Group) {
-  const box = new THREE.BoxGeometry(4.1, 1.85, 1.55)
-  box.translate(1.25, 0, GROUND_Z + 0.3 + 0.775)
-  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: COLORS.ego, transparent: true, opacity: 0.7 })))
+  group.add(egoOutline())
 }
 
 /** Replace a BufferGeometry's position (and optional color) attributes. */

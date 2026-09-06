@@ -8,6 +8,8 @@ import Inspector from './components/Inspector.vue'
 import DepthGrid from './components/DepthGrid.vue'
 import DepthCloudView from './components/DepthCloudView.vue'
 import DepthInspector from './components/DepthInspector.vue'
+import FusionView from './components/FusionView.vue'
+import FusionInspector from './components/FusionInspector.vue'
 import Timeline from './components/Timeline.vue'
 import CameraLightbox from './components/CameraLightbox.vue'
 import { loadScenes, state, stepFrame } from './state'
@@ -45,12 +47,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </div>
         <Inspector class="inspector" />
       </div>
-      <div class="stage" v-else>
+      <div class="stage" v-else-if="state.view === 'depth'">
         <div class="views">
           <DepthGrid class="cameras" />
           <DepthCloudView class="cloud" />
         </div>
         <DepthInspector class="inspector" />
+      </div>
+      <div class="stage" v-else>
+        <FusionView class="cloud" />
+        <FusionInspector class="inspector" />
       </div>
       <Timeline />
     </main>

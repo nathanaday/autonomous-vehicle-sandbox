@@ -82,6 +82,33 @@ The checkpoint and the precomputed predictions ship in the data bundle (see
 Data). Predictions for any image missing from the cache are computed on first
 request and cached under `data/cache/depth`.
 
+## Fused mesh view
+
+![Fused mesh, camera depth, driving through scene 0061](docs/fusion-view.jpg)
+
+The third view fuses a whole scene into one surface. Every keyframe's six
+depth images are cast into a truncated signed distance volume with Open3D,
+using the recorded ego poses, and marching cubes extracts the mesh. Colors
+come from the photos.
+
+- **Depth source.** Camera depth is the Depth Anything output made metric
+  with the per-image fit to lidar: dense, and only as right as that fit.
+  Lidar is the sweep projected into each camera and filled between beams by
+  nearest neighbour: sparse but measured. Comparing the two meshes of the same
+  scene shows what in-filling with camera depth buys and what it costs.
+- **Moving objects.** Anything whose annotated position changes by more than
+  a metre during the scene is masked out of the depth images before
+  integration. Parked cars stay, driving cars and pedestrians leave no smear.
+- **Driving through it.** The keyframe timeline moves the ego car along the
+  mesh, with the current lidar sweep drawn over the fused surface so the
+  alignment can be judged by eye. Shading can be photo colors, lit, or
+  normals, with a wireframe toggle.
+
+Each combination of scene, source, voxel size and masking is built once on
+first request, about 25 seconds, decimated to 700 000 triangles, and cached
+under `data/cache/fusion` as a 30 MB PLY. The fusion cache is not part of the
+data bundle.
+
 ## Setup
 
 Requires Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), and Node
@@ -177,11 +204,17 @@ resizes camera images on request, and serves `frontend/dist` when it exists.
 available, caches predictions, fits each image to the lidar, and unprojects
 the fitted depth into the ego frame.
 
-`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The two
+`backend/app/fusion.py` builds the fused meshes in a background thread with
+Open3D's scalable TSDF volume, masks moving objects using the annotation
+boxes, and writes binary PLY plus a JSON sidecar with stats and per-keyframe
+ego poses in the scene frame.
+
+`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The three
 views share the Three.js scaffolding in `composables/useThreeScene.ts`, with
-the ego frame used directly as world coordinates, z up. Only one view is
-mounted at a time so its WebGL context is released before the other one
-starts. Camera overlays are drawn on a 2D canvas over each image.
+the ego frame used directly as world coordinates, z up. The nuScenes ego
+origin is on the road surface. Only one view is mounted at a time so its
+WebGL context is released before the next one starts. Camera overlays are
+drawn on a 2D canvas over each image.
 
 ## What the mini split contains
 

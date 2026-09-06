@@ -1,8 +1,9 @@
 import { reactive, shallowRef, watch } from 'vue'
-import { api, type DepthFrame, type Frame, type SceneDepthSummary, type SceneDetail, type SceneSummary } from './api'
+import { api, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSummary } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
-export type ViewMode = 'explore' | 'depth'
+export type ViewMode = 'explore' | 'depth' | 'fusion'
+export type FusionShading = 'photo' | 'lit' | 'normals'
 export type DepthTileMode = 'wipe' | 'depth' | 'error'
 export type DepthCloudColor = 'photo' | 'camera' | 'error'
 
@@ -15,6 +16,17 @@ export const depthLayers = reactive({
   pointSize: 2.2,
   maxRange: 60,
   cameras: {} as Record<string, boolean>,
+})
+
+export const fusionLayers = reactive({
+  source: 'camera' as FusionSource,
+  voxel: 0.2,
+  maskMoving: true,
+  shading: 'photo' as FusionShading,
+  wireframe: false,
+  lidarOverlay: true,
+  path: true,
+  followEgo: true,
 })
 
 export const layers = reactive({
@@ -89,6 +101,35 @@ watch(
   ([view, f]) => {
     if (view !== 'depth' || !f) return
     if (depth.value?.detail.token !== f.detail.token) loadDepth(f.detail.token, f.detail.next)
+  },
+  { immediate: true },
+)
+
+/** Build status of the fused mesh for the current scene and settings. The
+ *  backend builds on first request; we poll until it is ready. */
+export const fusionStatus = shallowRef<FusionStatus | null>(null)
+let fusionPoll = 0
+
+async function pollFusion() {
+  const id = ++fusionPoll
+  const scene = state.scene
+  if (!scene || state.view !== 'fusion') return
+  const { source, voxel, maskMoving } = fusionLayers
+  try {
+    const s = await api.fusionStatus(scene.token, source, voxel, maskMoving)
+    if (id !== fusionPoll) return
+    fusionStatus.value = s
+    if (s.state === 'running') window.setTimeout(() => id === fusionPoll && pollFusion(), 1500)
+  } catch (e) {
+    if (id === fusionPoll) fusionStatus.value = { key: '', state: 'error', message: String(e) }
+  }
+}
+
+watch(
+  () => [state.view, state.scene?.token, fusionLayers.source, fusionLayers.voxel, fusionLayers.maskMoving] as const,
+  ([view]) => {
+    fusionStatus.value = null
+    if (view === 'fusion') pollFusion()
   },
   { immediate: true },
 )
@@ -171,11 +212,11 @@ export async function loadScene(token: string, index = 0) {
 }
 
 /** URL hash mirrors the view: #scene-0061/12/CAM_FRONT (scene, keyframe, open
- *  camera), or #depth/scene-0061/12 for the depth view. */
+ *  camera), or #depth/scene-0061/12 and #fusion/scene-0061/12 for the other views. */
 function readHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/')
-  const view: ViewMode = parts[0] === 'depth' ? 'depth' : 'explore'
-  if (view === 'depth') parts.shift()
+  const view: ViewMode = parts[0] === 'depth' || parts[0] === 'fusion' ? parts[0] : 'explore'
+  if (view !== 'explore') parts.shift()
   const [name, index, cam] = parts
   return { view, name: name || null, index: index ? Number(index) - 1 : 0, cam: cam || null }
 }
@@ -184,7 +225,7 @@ function writeHash() {
   const f = frame.value
   if (!f) return
   const parts = [f.detail.scene_name, String(f.detail.index + 1)]
-  if (state.view === 'depth') parts.unshift('depth')
+  if (state.view !== 'explore') parts.unshift(state.view)
   else if (state.lightboxCamera) parts.push(state.lightboxCamera)
   const next = '#' + parts.join('/')
   if (location.hash !== next) history.replaceState(null, '', next)

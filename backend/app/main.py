@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from .depth import DepthEstimator
+from .fusion import SOURCES, VOXELS, FusionBuilder
 from .nuscenes import NuScenes
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,9 +30,11 @@ FRONTEND_DIST = ROOT / "frontend" / "dist"
 DEPTH_CHECKPOINT = Path(os.environ.get(
     "DEPTH_ANYTHING_CHECKPOINT", DATA / "models" / "depth-anything-v2" / "depth_anything_v2_vitb.pth"))
 DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", DATA / "cache" / "depth"))
+FUSION_CACHE = Path(os.environ.get("FUSION_CACHE", DATA / "cache" / "fusion"))
 
 nusc = NuScenes(DATAROOT)
 depth_model = DepthEstimator(DEPTH_CHECKPOINT, DEPTH_CACHE)
+fusion = FusionBuilder(nusc, depth_model, FUSION_CACHE)
 app = FastAPI(title="nuScenes sandbox")
 
 
@@ -202,6 +205,40 @@ def depth_image(sd_token: str, w: int | None = Query(None, ge=64, le=1600)):
         raise HTTPException(400, "not an image")
     return Response(_depth_png(sd_token, w), media_type="image/png",
                     headers={"Cache-Control": "max-age=86400"})
+
+
+# ----- volumetric fusion --------------------------------------------------
+
+
+@app.get("/api/scenes/{scene_token}/fusion")
+def scene_fusion(
+    scene_token: str,
+    source: str = Query("camera"),
+    voxel: float = Query(0.2),
+    mask: bool = Query(True),
+):
+    """Status of the fused mesh for one scene. Starts the build in the
+    background if it is not cached; poll until state is 'ready', then fetch
+    /api/fusion/{key}.ply."""
+    _get("scene", scene_token)
+    if source not in SOURCES:
+        raise HTTPException(400, f"source must be one of {SOURCES}")
+    if voxel not in VOXELS:
+        raise HTTPException(400, f"voxel must be one of {VOXELS}")
+    if source == "camera":
+        _require_depth()
+    return fusion.status(scene_token, source, voxel, mask)
+
+
+@app.get("/api/fusion/{key}.ply")
+def fusion_mesh(key: str):
+    """Binary little-endian PLY with vertex positions, normals and colors, in
+    the ego frame of the scene's first keyframe."""
+    path = fusion.mesh_path(key)
+    if not path.exists() or "/" in key or ".." in key:
+        raise HTTPException(404, "no mesh with that key")
+    return FileResponse(path, media_type="application/octet-stream",
+                        headers={"Cache-Control": "max-age=86400"})
 
 
 if FRONTEND_DIST.exists():

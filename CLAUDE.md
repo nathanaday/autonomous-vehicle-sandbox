@@ -67,14 +67,19 @@ the data summary.
   `backend/app/depth_anything_v2`, checkpoint in `data/models/`),
   caches predictions under `data/cache/depth`, fits each image to the
   lidar with a scale and shift, and reports AbsRel, RMSE, δ1.
+- `backend/app/fusion.py` fuses a scene into one mesh with Open3D's TSDF
+  volume from either camera depth or lidar, masks moving objects, and caches
+  PLY files under `data/cache/fusion` (not in the data bundle).
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
-  Two views, `explore` and `depth`, share `composables/useThreeScene.ts`; only
-  one is mounted at a time.
+  Three views, `explore`, `depth` and `fusion`, share
+  `composables/useThreeScene.ts`; only one is mounted at a time.
+- The nuScenes ego frame origin is at road level, not at axle height. Ground
+  is z = 0; the lidar sweeps put it between -0.4 and 0 m.
 
 Only keyframes are exposed. Sweeps and map rasters are not wired up. No
 training code exists yet; the depth view is the stock baseline both stubs
-compare against.
+compare against. `todo.md` holds the wishlist, including the Gaussian splat view.
 
 ## Commands
 
