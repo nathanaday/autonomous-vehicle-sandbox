@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { channelLabel } from '../geometry'
-import { frame, splatLayers, splatStatus } from '../state'
+import { cancelSplatBuild, frame, sceneSplat, splatBuildError, splatLayers, splatStatus, startSplatBuild } from '../state'
 
 const s = computed(() => (splatStatus.value?.state === 'ready' ? splatStatus.value : null))
+const job = computed(() => sceneSplat.value?.job ?? null)
+const jobActive = computed(() => job.value?.state === 'running' || job.value?.state === 'cancelling')
+const missing = computed(() => (sceneSplat.value ? sceneSplat.value.n_total - sceneSplat.value.n_ready : 0))
+const thisBuilt = computed(() => splatStatus.value?.state === 'ready')
+const progressPct = computed(() => Math.round((job.value?.progress ?? 0) * 100))
 
 /** Views of the current keyframe only; with 18 views the neighbours are folded
  *  into the same six rows by channel. */
@@ -51,7 +56,7 @@ function pct(x: number) {
     </section>
 
     <section>
-      <h2>Run</h2>
+      <h2>Build</h2>
       <div class="row">
         <span class="muted">Views</span>
         <div class="seg">
@@ -69,8 +74,32 @@ function pct(x: number) {
       <p class="note muted">
         <template v-if="splatLayers.posed">Camera poses and intrinsics come from the nuScenes calibration and condition the model.</template>
         <template v-else>The model estimates camera poses itself. The result is aligned to the calibration afterwards, and the pose error is reported below.</template>
-        Each combination is built once and cached.
       </p>
+      <div class="row">
+        <span class="muted">This scene</span>
+        <span class="num" v-if="sceneSplat">{{ sceneSplat.n_ready }} of {{ sceneSplat.n_total }} keyframes built</span>
+        <span class="muted" v-else>…</span>
+      </div>
+      <template v-if="jobActive && job">
+        <div class="progress">
+          <div class="num">{{ job.label }}, keyframe {{ job.index + 1 }} of {{ job.total }}</div>
+          <div class="muted small">{{ job.message }}</div>
+          <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
+        </div>
+        <div class="actions">
+          <button class="secondary" @click="cancelSplatBuild" :disabled="job.state === 'cancelling'">{{ job.state === 'cancelling' ? 'Stopping' : 'Stop' }}</button>
+        </div>
+      </template>
+      <template v-else>
+        <div class="actions">
+          <button class="primary" :disabled="!sceneSplat || missing === 0" @click="startSplatBuild('scene')">{{ missing === 0 ? 'Scene built' : `Build ${missing} missing` }}</button>
+          <button class="secondary" :disabled="!sceneSplat || thisBuilt" @click="startSplatBuild('keyframe')">This keyframe</button>
+        </div>
+        <p class="note small" v-if="job?.state === 'error'" style="color: #ffd2d2">Last build failed: {{ job.message }}</p>
+        <p class="note muted small" v-else-if="job?.state === 'cancelled' || job?.state === 'done'">Last build: {{ job.message }}</p>
+        <p class="note small" v-if="splatBuildError" style="color: #ffd2d2">{{ splatBuildError }}</p>
+      </template>
+      <p class="note muted">Every combination of views and cameras is a separate build, cached under data/cache/splat. Builds run one at a time and never start from stepping or playback; the model loads once per build, then each keyframe takes about 5 s on the Apple GPU.</p>
     </section>
 
     <section v-if="s">
@@ -125,7 +154,7 @@ function pct(x: number) {
       <button class="toggle" :class="{ on: splatLayers.lidar }" @click="splatLayers.lidar = !splatLayers.lidar"><span>Lidar sweep</span><span class="knob"></span></button>
       <button class="toggle" :class="{ on: splatLayers.frustums }" @click="splatLayers.frustums = !splatLayers.frustums"><span>Camera frustums</span><span class="knob"></span></button>
       <button class="toggle" :class="{ on: splatLayers.rings }" @click="splatLayers.rings = !splatLayers.rings"><span>Range rings and ego car</span><span class="knob"></span></button>
-      <p class="note muted">Orbit away from the car to see how the splat holds up from viewpoints no camera saw. Step keyframes with the arrow keys to build the next one.</p>
+      <p class="note muted">Orbit away from the car to see how the splat holds up from viewpoints no camera saw. Once the scene is built, play it to watch the splats follow the drive.</p>
     </section>
   </aside>
 </template>
@@ -195,6 +224,48 @@ h2 {
   text-align: right;
   padding: 3px 0;
   border-top: 1px solid var(--line);
+}
+.small {
+  font-size: 12px;
+}
+.progress {
+  margin: 6px 0 2px;
+}
+.bar {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 300ms;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 2px;
+}
+.actions button {
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 12.5px;
+}
+.actions .primary {
+  background: var(--accent);
+  color: var(--ground);
+  font-weight: 600;
+}
+.actions .secondary {
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .seg {
   display: inline-flex;

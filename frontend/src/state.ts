@@ -1,5 +1,5 @@
 import { reactive, shallowRef, watch } from 'vue'
-import { api, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSummary, type SplatStatus } from './api'
+import { api, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
 export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat'
@@ -67,6 +67,7 @@ export const state = reactive({
   view: 'explore' as ViewMode,
   loadingDepth: false,
   depthError: null as string | null,
+  loadingSplat: false,
 })
 
 /** Current frame. shallowRef because the typed arrays are large and never mutate. */
@@ -143,30 +144,94 @@ watch(
   { immediate: true },
 )
 
-/** Build status of the Gaussian splat for the current keyframe and options. */
-export const splatStatus = shallowRef<SplatStatus | null>(null)
-let splatPoll = 0
+/** Which keyframes of the current scene have a Gaussian splat for the chosen
+ *  options, and the build job if one runs. Splats are never built by
+ *  looking at them: a build starts only from startSplatBuild, and the
+ *  backend runs one at a time. We poll while a job is active. */
+export const sceneSplat = shallowRef<SceneSplatStatus | null>(null)
+export const splatBuildError = shallowRef<string | null>(null)
+let sceneSplatPoll = 0
 
-async function pollSplat() {
-  const id = ++splatPoll
-  const f = frame.value
-  if (!f || state.view !== 'splat') return
+function jobActive(s: SceneSplatStatus | null) {
+  return s?.job?.state === 'running' || s?.job?.state === 'cancelling'
+}
+
+async function pollSceneSplat() {
+  const id = ++sceneSplatPoll
+  const scene = state.scene
+  if (!scene || state.view !== 'splat') return
   const { views, posed } = splatLayers
   try {
-    const s = await api.splatStatus(f.detail.token, views, posed)
-    if (id !== splatPoll) return
-    splatStatus.value = s
-    if (s.state === 'running') window.setTimeout(() => id === splatPoll && pollSplat(), 2000)
+    const s = await api.sceneSplat(scene.token, views, posed)
+    if (id !== sceneSplatPoll) return
+    sceneSplat.value = s
+    if (jobActive(s)) window.setTimeout(() => id === sceneSplatPoll && pollSceneSplat(), 1500)
   } catch (e) {
-    if (id === splatPoll) splatStatus.value = { key: '', state: 'error', message: String(e) }
+    if (id === sceneSplatPoll) splatBuildError.value = String(e)
   }
 }
 
 watch(
-  () => [state.view, frame.value?.detail.token, splatLayers.views, splatLayers.posed] as const,
+  () => [state.view, state.scene?.token, splatLayers.views, splatLayers.posed] as const,
   ([view]) => {
-    splatStatus.value = null
-    if (view === 'splat') pollSplat()
+    sceneSplat.value = null
+    splatBuildError.value = null
+    if (view === 'splat') pollSceneSplat()
+  },
+  { immediate: true },
+)
+
+/** Build the splats the scene is missing, or only the current keyframe's. */
+export async function startSplatBuild(scope: 'scene' | 'keyframe') {
+  const scene = state.scene
+  const f = frame.value
+  if (!scene || !f) return
+  const { views, posed } = splatLayers
+  splatBuildError.value = null
+  try {
+    sceneSplat.value = scope === 'scene' ? await api.buildSceneSplat(scene.token, views, posed) : await api.buildSampleSplat(f.detail.token, views, posed)
+  } catch (e) {
+    splatBuildError.value = String(e)
+  }
+  pollSceneSplat()
+}
+
+export async function cancelSplatBuild() {
+  try {
+    await api.cancelSplat()
+  } catch (e) {
+    splatBuildError.value = String(e)
+  }
+  pollSceneSplat()
+}
+
+/** The current keyframe's splat: its stats when built, else its state. */
+export const splatStatus = shallowRef<SplatStatus | null>(null)
+let splatRequest = 0
+
+watch(
+  () => [state.view, frame.value?.detail.token, sceneSplat.value] as const,
+  async ([view, token, scene]) => {
+    const id = ++splatRequest
+    const kf = scene?.keyframes.find((k) => k.token === token)
+    if (view !== 'splat' || !token || !scene || !kf) {
+      splatStatus.value = null
+      return
+    }
+    if (!kf.ready) {
+      const job = scene.job
+      const inJob = jobActive(scene) && job!.keys.includes(kf.key)
+      const where = !inJob ? 'missing' : job!.current?.key === kf.key ? 'running' : 'queued'
+      splatStatus.value = { key: kf.key, state: where, progress: job?.progress, message: job?.message }
+      return
+    }
+    if (splatStatus.value?.key === kf.key && splatStatus.value.state === 'ready') return
+    try {
+      const s = await api.splatStatus(token, scene.views, scene.posed)
+      if (id === splatRequest) splatStatus.value = s
+    } catch (e) {
+      if (id === splatRequest) splatStatus.value = { key: kf.key, state: 'error', message: String(e) }
+    }
   },
   { immediate: true },
 )
@@ -308,7 +373,8 @@ watch(
         goToIndex(0)
         return
       }
-      if (!state.loadingFrame) loadFrame(f.detail.next)
+      const busy = state.loadingFrame || (state.view === 'splat' && state.loadingSplat)
+      if (!busy) loadFrame(f.detail.next)
     }, 1000 / fps)
   },
 )

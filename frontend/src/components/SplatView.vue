@@ -5,7 +5,7 @@ import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 import { api, LIDAR_STRIDE, type SplatStatus } from '../api'
 import { COLORS } from '../geometry'
 import { setPoints, useThreeScene } from '../composables/useThreeScene'
-import { frame, splatLayers, splatStatus, state } from '../state'
+import { cancelSplatBuild, frame, sceneSplat, splatBuildError, splatLayers, splatStatus, startSplatBuild, state } from '../state'
 
 const host = ref<HTMLDivElement | null>(null)
 const { scene, renderer, rings, ego, preset, setView } = useThreeScene(host)
@@ -20,46 +20,83 @@ watch(renderer, (r) => {
   }
 })
 
-let splat: SplatMesh | null = null
-let splatKey = ''
-const loading = ref(false)
+// Loaded splats stay in a small cache so stepping back is instant and, during
+// playback, the next keyframe's 40 MB PLY is fetched while this one shows.
+// Fetching starts on construction; a mesh joins the scene only when shown.
+const MESH_CACHE = 4
+const meshes = new Map<string, SplatMesh>()
+let shown: SplatMesh | null = null
+let shownKey = ''
 const loadError = ref<string | null>(null)
 
-function clearSplat() {
-  if (splat) {
-    scene.remove(splat)
-    splat.dispose()
-    splat = null
+function mesh(key: string): SplatMesh {
+  let m = meshes.get(key)
+  if (m) {
+    meshes.delete(key)
+    meshes.set(key, m) // most recent last
+    return m
   }
-  splatKey = ''
+  m = new SplatMesh({ url: api.splatUrl(key) })
+  meshes.set(key, m)
+  for (const [k, old] of meshes) {
+    if (meshes.size <= MESH_CACHE) break
+    if (old === shown) continue
+    meshes.delete(k)
+    old.dispose()
+  }
+  return m
 }
 
-async function showSplat(s: SplatStatus) {
-  if (s.key === splatKey) return
-  clearSplat()
-  splatKey = s.key
-  loading.value = true
+function hideSplat() {
+  if (shown) scene.remove(shown)
+  shown = null
+  shownKey = ''
+  state.loadingSplat = false
+}
+
+async function showSplat(key: string) {
+  if (key === shownKey) return
+  hideSplat()
+  const m = mesh(key)
+  shown = m
+  shownKey = key
+  scene.add(m)
+  state.loadingSplat = true
   loadError.value = null
-  const mesh = new SplatMesh({ url: api.splatUrl(s.key) })
-  splat = mesh
-  scene.add(mesh)
   try {
-    await mesh.initialized
+    await m.initialized
   } catch (e) {
-    if (splat === mesh) loadError.value = String(e)
+    if (shown === m) loadError.value = String(e)
   } finally {
-    if (splat === mesh) loading.value = false
+    if (shown === m) state.loadingSplat = false
   }
+}
+
+function prefetchNext() {
+  const f = frame.value
+  const sc = sceneSplat.value
+  if (!f?.detail.next || !sc || !state.playing) return
+  const next = sc.keyframes.find((k) => k.token === f.detail.next)
+  if (next?.ready) mesh(next.key)
 }
 
 watch(
   splatStatus,
   (s) => {
-    if (s?.state === 'ready') showSplat(s)
-    else if (!s || s.state !== 'running') clearSplat()
+    if (s?.state === 'ready') {
+      showSplat(s.key)
+      prefetchNext()
+    } else hideSplat()
   },
   { immediate: true },
 )
+
+function disposeAll() {
+  hideSplat()
+  for (const m of meshes.values()) m.dispose()
+  meshes.clear()
+}
+watch(() => state.scene?.token, disposeAll)
 
 // ----- overlays: lidar of the keyframe, camera frustums -----
 
@@ -124,14 +161,17 @@ function applyLayers() {
 watch(splatLayers, applyLayers, { immediate: true })
 
 onUnmounted(() => {
-  clearSplat()
+  disposeAll()
   if (spark) {
     scene.remove(spark)
     spark = null
   }
 })
 
-const progressPct = computed(() => Math.round((splatStatus.value?.progress ?? 0) * 100))
+const job = computed(() => sceneSplat.value?.job ?? null)
+const jobActive = computed(() => job.value?.state === 'running' || job.value?.state === 'cancelling')
+const missing = computed(() => (sceneSplat.value ? sceneSplat.value.n_total - sceneSplat.value.n_ready : 0))
+const progressPct = computed(() => Math.round((job.value?.progress ?? 0) * 100))
 const sizeMb = computed(() => ((splatStatus.value?.ply_bytes ?? 0) / 1e6).toFixed(0))
 </script>
 
@@ -139,18 +179,36 @@ const sizeMb = computed(() => ((splatStatus.value?.ply_bytes ?? 0) / 1e6).toFixe
   <section class="cloud">
     <div class="host" ref="host"></div>
 
-    <div class="banner" v-if="splatStatus?.state === 'running'">
-      <div class="title">Depth Anything 3 on {{ splatLayers.views }} views</div>
-      <div class="muted">{{ splatStatus.message }}</div>
+    <div class="banner" v-if="splatStatus?.state === 'running' || splatStatus?.state === 'queued'">
+      <div class="title">
+        <template v-if="splatStatus.state === 'running'">Building this keyframe</template>
+        <template v-else>Queued: building {{ job?.label }}, keyframe {{ (job?.index ?? 0) + 1 }} of {{ job?.total }}</template>
+      </div>
+      <div class="muted">{{ job?.message }}</div>
       <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
-      <div class="hint muted">First run loads a 6.8 GB model. Later keyframes take about a minute each.</div>
+      <div class="actions"><button class="secondary" @click="cancelSplatBuild" :disabled="job?.state === 'cancelling'">Stop</button></div>
     </div>
-    <div class="banner error" v-else-if="splatStatus?.state === 'error' || loadError">
+    <div class="banner" v-else-if="splatStatus?.state === 'missing'">
+      <div class="title">No splat built for this keyframe</div>
+      <template v-if="jobActive">
+        <div class="muted">Building {{ job?.label }}, keyframe {{ (job?.index ?? 0) + 1 }} of {{ job?.total }}. Builds run one at a time.</div>
+        <div class="bar"><i :style="{ width: progressPct + '%' }"></i></div>
+      </template>
+      <template v-else>
+        <div class="muted">Splats are built on request, never during playback. Build this keyframe, or the whole scene so you can play it.</div>
+        <div class="actions">
+          <button class="primary" @click="startSplatBuild('scene')">Build {{ missing }} missing keyframe{{ missing === 1 ? '' : 's' }}</button>
+          <button class="secondary" @click="startSplatBuild('keyframe')">This keyframe only</button>
+        </div>
+        <div class="hint muted">About 5 s per keyframe on the Apple GPU, plus one model load per build.</div>
+      </template>
+    </div>
+    <div class="banner error" v-else-if="splatStatus?.state === 'error' || loadError || splatBuildError">
       <div class="title">The splat could not be built</div>
-      <div>{{ splatStatus?.message || loadError }}</div>
+      <div>{{ splatStatus?.message || loadError || splatBuildError }}</div>
       <pre v-if="splatStatus?.tail?.length" class="tail">{{ splatStatus.tail.join('\n') }}</pre>
     </div>
-    <div class="banner" v-else-if="loading"><div class="title">Loading {{ sizeMb }} MB of Gaussians</div></div>
+    <div class="banner" v-else-if="state.loadingSplat"><div class="title">Loading {{ sizeMb }} MB of Gaussians</div></div>
 
     <div class="hud">
       <div class="views">
@@ -201,6 +259,29 @@ const sizeMb = computed(() => ((splatStatus.value?.ply_bytes ?? 0) / 1e6).toFixe
 .hint {
   margin-top: 8px;
   font-size: 12px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.actions button {
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 12.5px;
+}
+.actions .primary {
+  background: var(--accent);
+  color: var(--ground);
+  font-weight: 600;
+}
+.actions .secondary {
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .tail {
   margin: 8px 0 0;

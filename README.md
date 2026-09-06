@@ -149,10 +149,15 @@ Setup for this view is separate because Depth Anything 3 pins `numpy<2`:
 make splat-setup    # its own uv environment under tools/da3, plus a 6.8 GB checkpoint
 ```
 
-Splats build on first request, about 10 seconds each, and cache under
-`data/cache/splat` as 40 MB PLY files that any 3DGS viewer can open. Without
-the checkpoint the other three views work and this one reports the missing
-file. The checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
+Splats are built on request, never by stepping or playing through keyframes.
+The view offers to build the current keyframe or every keyframe the scene is
+missing; a scene build loads the model once and then takes about 5 seconds per
+keyframe on the Apple GPU, with progress in the panel and on the timeline. The
+backend runs one build at a time and refuses a second one while it runs.
+Results cache under `data/cache/splat` as 40 MB PLY files that any 3DGS viewer
+can open, and once a scene is built, playback shows the splat of each keyframe
+from the cache. Without the checkpoint the other three views work and this one
+reports the missing file. The checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
 the DA3 code installed by pip are Apache 2.0.
 
 ## Setup
@@ -257,9 +262,10 @@ Open3D's scalable TSDF volume, masks moving objects using the annotation
 boxes, and writes binary PLY plus a JSON sidecar with stats and per-keyframe
 ego poses in the scene frame.
 
-`tools/da3/splat_export.py` runs Depth Anything 3 in its own environment and
-writes a 3DGS PLY in the ego frame; `backend/app/splat.py` launches it as a
-subprocess, follows its progress file, and serves the result.
+`tools/da3/splat_export.py` runs Depth Anything 3 in its own environment on a
+list of keyframes, loading the model once, and writes a 3DGS PLY per keyframe
+in its ego frame; `backend/app/splat.py` launches it as a subprocess for one
+build at a time, follows its progress file, and serves the results.
 
 `frontend/src` is Vue 3 with a small reactive store in `state.ts`. The four
 views share the Three.js scaffolding in `composables/useThreeScene.ts`, with

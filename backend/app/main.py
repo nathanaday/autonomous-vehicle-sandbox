@@ -22,7 +22,7 @@ from PIL import Image
 from .depth import DepthEstimator
 from .fusion import SOURCES, VOXELS, FusionBuilder
 from .nuscenes import NuScenes
-from .splat import SplatBuilder
+from .splat import BuildBusy, SplatBuilder
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
@@ -246,6 +246,32 @@ def fusion_mesh(key: str):
 
 
 # ----- Gaussian splats (Depth Anything 3) --------------------------------
+#
+# Splats are built only by the two POST routes below, one exporter process at
+# a time. The GET routes read the cache and the running job; they never start
+# a build, so stepping or playing through keyframes costs nothing.
+
+
+def _splat_options(views: int, posed: bool) -> tuple[int, bool]:
+    if views not in (6, 18):
+        raise HTTPException(400, "views must be 6 or 18")
+    if not splats.available:
+        raise HTTPException(503, f"Depth Anything 3 checkpoint not found at {DA3_MODEL_DIR}. "
+                                 "See README, Gaussian splat view.")
+    return views, posed
+
+
+def _scene_sample_tokens(scene_token: str) -> list[str]:
+    _get("scene", scene_token)
+    return [s["token"] for s in nusc.samples_of_scene[scene_token]]
+
+
+def _start_build(label: str, scene_token: str, sample_tokens: list[str], views: int, posed: bool) -> dict:
+    try:
+        splats.build(label, scene_token, sample_tokens, views, posed)
+    except BuildBusy as busy:
+        raise HTTPException(409, f"a build is already running: {busy}")
+    return splats.scene_status(scene_token, _scene_sample_tokens(scene_token), views, posed)
 
 
 @app.get("/api/splat/info")
@@ -253,18 +279,50 @@ def splat_info():
     return splats.info()
 
 
+@app.get("/api/splat/job")
+def splat_job():
+    """The running build, or the last one."""
+    return splats.job_status()
+
+
+@app.post("/api/splat/cancel")
+def splat_cancel():
+    return {"cancelled": splats.cancel()}
+
+
+@app.get("/api/scenes/{scene_token}/splat")
+def scene_splat(scene_token: str, views: int = Query(6), posed: bool = Query(True)):
+    """Which keyframes of the scene have a splat for these options, plus the
+    build job if one is running."""
+    tokens = _scene_sample_tokens(scene_token)
+    return splats.scene_status(scene_token, tokens, *_splat_options(views, posed))
+
+
+@app.post("/api/scenes/{scene_token}/splat/build")
+def scene_splat_build(scene_token: str, views: int = Query(6), posed: bool = Query(True)):
+    """Build the splats of every keyframe in the scene that is not cached yet,
+    in one exporter process. 409 while another build runs."""
+    tokens = _scene_sample_tokens(scene_token)
+    name = nusc.get("scene", scene_token)["name"]
+    return _start_build(name, scene_token, tokens, *_splat_options(views, posed))
+
+
 @app.get("/api/samples/{sample_token}/splat")
 def sample_splat(sample_token: str, views: int = Query(6), posed: bool = Query(True)):
-    """Status of the Gaussian splat for one keyframe. Starts the DA3 run in the
-    background if it is not cached; poll until state is 'ready', then fetch
-    /api/splat/{key}.ply."""
+    """Stats of the keyframe's splat when it is built; otherwise its state:
+    'running', 'queued' or 'missing'. Fetch /api/splat/{key}.ply when ready."""
     _get("sample", sample_token)
-    if views not in (6, 18):
-        raise HTTPException(400, "views must be 6 or 18")
-    if not splats.available:
-        raise HTTPException(503, f"Depth Anything 3 checkpoint not found at {DA3_MODEL_DIR}. "
-                                 "See README, Gaussian splat view.")
-    return splats.status(sample_token, views, posed)
+    return splats.sample_status(sample_token, *_splat_options(views, posed))
+
+
+@app.post("/api/samples/{sample_token}/splat/build")
+def sample_splat_build(sample_token: str, views: int = Query(6), posed: bool = Query(True)):
+    """Build the splat of one keyframe. 409 while another build runs."""
+    sample = _get("sample", sample_token)
+    scene = nusc.get("scene", sample["scene_token"])
+    index = [s["token"] for s in nusc.samples_of_scene[scene["token"]]].index(sample_token)
+    label = f"{scene['name']} keyframe {index + 1}"
+    return _start_build(label, scene["token"], [sample_token], *_splat_options(views, posed))
 
 
 @app.get("/api/splat/{key}.ply")

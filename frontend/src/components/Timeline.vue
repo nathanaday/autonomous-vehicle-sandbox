@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatTimestamp } from '../geometry'
-import { depthScenes, frame, goToIndex, state, stepFrame } from '../state'
+import { depthScenes, frame, goToIndex, sceneSplat, state, stepFrame } from '../state'
 
 const detail = computed(() => frame.value?.detail ?? null)
 const samples = computed(() => state.scene?.samples ?? [])
@@ -17,11 +17,21 @@ const errors = computed(() => {
 })
 const maxError = computed(() => (errors.value ? Math.max(0.01, ...errors.value.values()) : 1))
 
+/** In the splat view the bars show which keyframes have a splat built. */
+const built = computed(() => {
+  const sc = state.view === 'splat' ? sceneSplat.value : null
+  if (!sc || sc.scene_token !== state.scene?.token) return null
+  return new Map(sc.keyframes.map((k) => [k.token, k.ready]))
+})
+const building = computed(() => (state.view === 'splat' ? sceneSplat.value?.job?.current?.token ?? null : null))
+
 function barHeight(s: { token: string; nbr_annotations: number }) {
+  if (built.value) return built.value.get(s.token) ? 100 : 20
   if (errors.value) return 15 + (85 * (errors.value.get(s.token) ?? 0)) / maxError.value
   return 25 + (75 * s.nbr_annotations) / maxAnnotations.value
 }
 function barTitle(s: { token: string; nbr_annotations: number }, i: number) {
+  if (built.value) return `Keyframe ${i + 1}, ${s.token === building.value ? 'building' : built.value.get(s.token) ? 'splat built' : 'no splat yet'}`
   const e = errors.value?.get(s.token)
   return e !== undefined ? `Keyframe ${i + 1}, AbsRel ${(e * 100).toFixed(1)}%` : `Keyframe ${i + 1}, ${s.nbr_annotations} objects`
 }
@@ -57,7 +67,7 @@ function cycleSpeed() {
           v-for="(s, i) in samples"
           :key="s.token"
           class="tick"
-          :class="{ current: i === detail.index, past: i < detail.index }"
+          :class="{ current: i === detail.index, past: i < detail.index, unbuilt: built ? !built.get(s.token) : false, building: s.token === building }"
           :title="barTitle(s, i)"
           @click="goToIndex(i)"
         >
@@ -69,7 +79,8 @@ function cycleSpeed() {
     <div class="readout num" v-if="detail">
       <span class="frame">Keyframe {{ detail.index + 1 }} of {{ detail.count }}</span>
       <span class="muted">t = {{ detail.t_s.toFixed(1) }} s</span>
-      <span class="muted bars-hint" v-if="errors">bars: depth error per keyframe</span>
+      <span class="muted bars-hint" v-if="built">bars: keyframes with a splat</span>
+      <span class="muted bars-hint" v-else-if="errors">bars: depth error per keyframe</span>
       <span class="muted stamp">{{ formatTimestamp(detail.timestamp) }}</span>
     </div>
   </footer>
@@ -145,6 +156,22 @@ function cycleSpeed() {
 }
 .tick.current .bar {
   background: var(--accent);
+}
+.tick.unbuilt .bar {
+  opacity: 0.35;
+}
+.tick.building .bar {
+  opacity: 1;
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .tick:hover .bar {
   background: var(--text);

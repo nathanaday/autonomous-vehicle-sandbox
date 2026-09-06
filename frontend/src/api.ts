@@ -220,9 +220,12 @@ export interface SplatViewMeta {
   lidar?: { n: number; abs_rel: number; delta1: number; median_scale_to_lidar: number; abs_rel_after_scale: number }
 }
 
+/** One keyframe's splat: its stats once built, otherwise where it stands.
+ *  'running' and 'queued' refer to the build job in progress; 'missing'
+ *  means nobody has asked for it yet. */
 export interface SplatStatus {
   key: string
-  state: 'running' | 'ready' | 'error'
+  state: 'ready' | 'running' | 'queued' | 'missing' | 'error'
   progress?: number
   message?: string
   tail?: string[]
@@ -242,12 +245,50 @@ export interface SplatStatus {
   ply_bytes?: number
 }
 
+/** The one build job the backend runs at a time; stays as the last job
+ *  after it finishes so its result or error can be shown. */
+export interface SplatJob {
+  id: number
+  label: string
+  scene_token: string
+  views: number
+  posed: boolean
+  keys: string[]
+  state: 'running' | 'cancelling' | 'done' | 'cancelled' | 'error'
+  total: number
+  index: number
+  current: { token: string; key: string } | null
+  progress: number
+  message: string
+  tail: string[]
+  seconds: number
+}
+
+export interface SceneSplatStatus {
+  scene_token: string
+  views: number
+  posed: boolean
+  keyframes: { token: string; key: string; ready: boolean }[]
+  n_ready: number
+  n_total: number
+  job: SplatJob | null
+}
+
 export const DEPTH_CLOUD_STRIDE = 7
 export const DEPTH_LIDAR_STRIDE = 5
 
 async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url)
   if (!r.ok) throw new Error(`${r.status} ${url}`)
+  return r.json()
+}
+
+async function postJson<T>(url: string): Promise<T> {
+  const r = await fetch(url, { method: 'POST' })
+  if (!r.ok) {
+    const body = await r.json().catch(() => null)
+    throw new Error(body?.detail ?? `${r.status} ${url}`)
+  }
   return r.json()
 }
 
@@ -285,6 +326,13 @@ export const api = {
   fusionMeshUrl: (key: string) => `/api/fusion/${key}.ply`,
   splatStatus: (sampleToken: string, views: number, posed: boolean) =>
     getJson<SplatStatus>(`/api/samples/${sampleToken}/splat?views=${views}&posed=${posed}`),
+  sceneSplat: (sceneToken: string, views: number, posed: boolean) =>
+    getJson<SceneSplatStatus>(`/api/scenes/${sceneToken}/splat?views=${views}&posed=${posed}`),
+  buildSceneSplat: (sceneToken: string, views: number, posed: boolean) =>
+    postJson<SceneSplatStatus>(`/api/scenes/${sceneToken}/splat/build?views=${views}&posed=${posed}`),
+  buildSampleSplat: (sampleToken: string, views: number, posed: boolean) =>
+    postJson<SceneSplatStatus>(`/api/samples/${sampleToken}/splat/build?views=${views}&posed=${posed}`),
+  cancelSplat: () => postJson<{ cancelled: boolean }>('/api/splat/cancel'),
   splatUrl: (key: string) => `/api/splat/${key}.ply`,
   depthImageUrl: (sdToken: string, width?: number) =>
     width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,

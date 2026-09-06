@@ -12,6 +12,8 @@ and the Spark renderer. Left over from that work:
   view next to the feed-forward one.
 - A Gaussian size slider in the viewer. Today the size multiplier is a build
   option (`--scale-mult`, default 0.7).
+- A `make splat-cache` target that builds every scene from the command line,
+  like `make depth-cache`, and ships the PLYs in the data bundle.
 - Splats of several keyframes stitched along the trajectory, with moving
   objects masked, as a splat counterpart to the fused mesh.
 - Try DA3's sky mask and confidence to prune more aggressively, and try the

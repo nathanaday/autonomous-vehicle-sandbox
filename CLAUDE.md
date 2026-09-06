@@ -71,11 +71,15 @@ the data summary.
   volume from either camera depth or lidar, masks moving objects, and caches
   PLY files under `data/cache/fusion` (not in the data bundle).
 - `tools/da3/` is a separate uv environment running Depth Anything 3 (pins
-  numpy<2, so it cannot share the backend env). `splat_export.py` writes a 3DGS
-  PLY per keyframe; `backend/app/splat.py` runs it as a subprocess. Checkpoint
-  in `data/models/da3/`, outputs in `data/cache/splat/`. Two DA3 quirks are
-  worked around in the exporter and explained in its comments: the API's
-  pose-based depth rescale, and the Gaussian head's positions.
+  numpy<2, so it cannot share the backend env). `splat_export.py` takes a list
+  of keyframes, loads the model once, and writes a 3DGS PLY per keyframe;
+  `backend/app/splat.py` runs it as a subprocess, one build at a time, and only
+  when a build route is called. Reading a splat's status never starts a build:
+  playback once started one exporter per keyframe, each loading the 6.8 GB
+  model, and took the machine down. Checkpoint in `data/models/da3/`, outputs
+  in `data/cache/splat/`. Two DA3 quirks are worked around in the exporter and
+  explained in its comments: the API's pose-based depth rescale, and the
+  Gaussian head's positions.
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
   Four views, `explore`, `depth`, `fusion` and `splat`, share
