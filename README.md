@@ -123,13 +123,6 @@ project into it. Everything reported is measured after that fit. That is the
 best case for the stock model, and the spread of fitted scales between cameras
 of the same keyframe is one of the things a real system would have to resolve.
 
-On the mini split the stock model lands at 9 to 16 percent AbsRel on the
-daytime scenes and 20 to 22 percent on the three night scenes.
-
-The predictions come precomputed in the `depth` bundle (see Data) or from
-`compute/cli.py depth`, under `data/cache/depth`. The fit to lidar and the
-error numbers are computed by the backend per request from the cached
-prediction, so they need no model.
 
 ## Fused mesh view
 
@@ -153,12 +146,6 @@ come from the photos.
   alignment can be judged by eye. Shading can be photo colors, lit, or
   normals, with a wireframe toggle.
 
-Each combination of scene, source, voxel size and masking is a separate
-mesh, decimated to 700 000 triangles, about 30 MB as PLY under
-`data/cache/fusion`. The `fusion` bundle carries all twelve combinations for
-each of its scenes; `compute/cli.py fusion` makes them, about 25 seconds
-each. A combination missing from the cache shows the command that computes
-it.
 
 ## Gaussian splat view
 
@@ -186,23 +173,7 @@ views and 10 for twelve. The browser renders the result with
 - **Overlays.** The lidar sweep, the camera frustums, the range rings and ego
   car, all in the keyframe's ego frame.
 
-Two implementation notes. The API's final step rescales metric depth by a
-similarity fit between predicted and given camera centres; with six cameras a
-metre apart that fit is ill-conditioned and halved the depth, so the exporter
-skips it and keeps the metric branch's scale. And the Gaussian head's own
-positions disagreed with its depth map by a factor of 1.4 to 2.5, so the
-exporter keeps the model's rays, colors, opacities and shapes but places every
-Gaussian on the metric depth map along calibrated rays.
 
-Splats come precomputed in the `splat` bundle, as 40 MB 3DGS PLY files under
-`data/cache/splat` that any 3DGS viewer can open, one per keyframe for the
-six-view calibrated setting. The viewer never runs the model: a keyframe
-without a splat shows the command that computes it, and playback shows each
-keyframe's splat from the cache. `compute/cli.py splat` computes a scene in
-about three and a half minutes on an Apple GPU, and its `--views 18` and
-`--unposed` options fill the other settings the panel offers. The Depth
-Anything 3 checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
-the DA3 code installed by pip are Apache 2.0.
 
 ---
 
