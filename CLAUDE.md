@@ -55,6 +55,36 @@ the UI; losing the built mode costs the ability to hand someone one command.
 
 ## Current state
 
-No code yet. Only `depth-anything-av-application.md` and this file. There is no
-build, test, or run command to document until the stack lands — add that section
-here when it does.
+The viewer works end to end on `v1.0-mini`. See `README.md` for the layout and
+the data summary.
+
+- `backend/app/nuscenes.py` reads the JSON tables and does all geometry. Every
+  keyframe is expressed in the ego frame at the lidar timestamp. No devkit.
+- `backend/app/main.py` is the FastAPI app. JSON for scenes and frames, binary
+  `Float32Array` for lidar and radar, resized JPEGs for cameras. Serves
+  `frontend/dist` at `/` when it exists.
+- `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
+  hash sync. `overlay.ts` draws projected points and boxes onto camera images.
+
+Only keyframes are exposed. Sweeps, map rasters, and any model inference are
+not wired up yet.
+
+## Commands
+
+Dataset: extract `nuscenes/v1.0-mini.tar` into `nuscenes/data/` (gitignored).
+
+- `make setup` installs Python deps with uv and npm deps.
+- `make backend` and `make frontend` run the two dev servers. Open
+  http://localhost:5173.
+- `make demo` builds the UI and serves everything from http://localhost:8000.
+- `make check` type-checks the frontend. There are no automated tests yet.
+
+Take screenshots with headless Chrome when the browser extension is not
+connected:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  --disable-gpu --use-angle=swiftshader --enable-unsafe-swiftshader \
+  --hide-scrollbars --window-size=1600,1000 --virtual-time-budget=8000 \
+  --screenshot=out.png "http://localhost:5173/#scene-1094/20"
+```

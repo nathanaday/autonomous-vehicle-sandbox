@@ -1,0 +1,25 @@
+# Development: run `make backend` and `make frontend` in two terminals,
+# then open http://localhost:5173.
+# Demo: `make demo` builds the UI and serves everything from one process
+# at http://localhost:8000.
+
+.PHONY: setup backend frontend build demo check
+
+setup:
+	cd backend && uv sync
+	cd frontend && npm install
+
+backend:
+	cd backend && uv run uvicorn app.main:app --reload --port 8000
+
+frontend:
+	cd frontend && npm run dev
+
+build:
+	cd frontend && npm run build
+
+demo: build
+	cd backend && uv run uvicorn app.main:app --port 8000
+
+check:
+	cd frontend && npx vue-tsc --noEmit

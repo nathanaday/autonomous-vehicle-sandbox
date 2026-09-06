@@ -1,0 +1,156 @@
+:root {
+  --ground: #0f1620;
+  --panel: #161f2b;
+  --panel-2: #1c2634;
+  --line: #24303f;
+  --line-strong: #34435a;
+  --text: #e6eaf0;
+  --muted: #8a97a8;
+  --faint: #5c6a7d;
+  --lidar: #9dd7ff;
+  --radar: #ffb347;
+  --accent: #9dd7ff;
+  --focus: #ffd98a;
+  --rail-w: 264px;
+  --inspector-w: 300px;
+  --radius: 6px;
+  font-family: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--ground);
+  font-feature-settings: 'tnum' 1;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--ground);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+[tabindex]:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* Small pill used for scene tags and modality chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.chip.night {
+  border-color: #4d5fa8;
+  color: #aab6ff;
+}
+.chip.rain {
+  border-color: #3d8aa8;
+  color: #8fd8f5;
+}
+
+.swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* Toggle switch rows in the inspector */
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 0;
+  color: var(--text);
+  text-align: left;
+}
+.toggle .knob {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  flex: none;
+  transition: background 120ms;
+}
+.toggle .knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ground);
+  transition: transform 120ms;
+}
+.toggle.on .knob {
+  background: var(--accent);
+}
+.toggle.on .knob::after {
+  transform: translateX(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

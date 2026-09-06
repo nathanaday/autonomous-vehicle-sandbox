@@ -1,0 +1,149 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { formatTimestamp } from '../geometry'
+import { frame, goToIndex, state, stepFrame } from '../state'
+
+const detail = computed(() => frame.value?.detail ?? null)
+const samples = computed(() => state.scene?.samples ?? [])
+const maxAnnotations = computed(() => Math.max(1, ...samples.value.map((s) => s.nbr_annotations)))
+const speeds = [1, 2, 5, 10]
+
+function cycleSpeed() {
+  const i = speeds.indexOf(state.fps)
+  state.fps = speeds[(i + 1) % speeds.length]
+}
+</script>
+
+<template>
+  <footer class="timeline">
+    <div class="controls">
+      <button class="btn" title="Previous keyframe (←)" @click="stepFrame(-1)" aria-label="Previous keyframe">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M10 2 4 7l6 5z" fill="currentColor" /></svg>
+      </button>
+      <button class="btn play" :title="state.playing ? 'Pause (space)' : 'Play (space)'" @click="state.playing = !state.playing" :aria-label="state.playing ? 'Pause' : 'Play'">
+        <svg v-if="!state.playing" width="14" height="14" viewBox="0 0 14 14"><path d="M3 2v10l9-5z" fill="currentColor" /></svg>
+        <svg v-else width="14" height="14" viewBox="0 0 14 14"><path d="M3 2h3v10H3zM8 2h3v10H8z" fill="currentColor" /></svg>
+      </button>
+      <button class="btn" title="Next keyframe (→)" @click="stepFrame(1)" aria-label="Next keyframe">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M4 2l6 5-6 5z" fill="currentColor" /></svg>
+      </button>
+      <button class="speed num" @click="cycleSpeed" title="Playback rate in keyframes per second. Keyframes are recorded at 2 per second.">
+        {{ state.fps }}×
+      </button>
+    </div>
+
+    <div class="scrubber" v-if="detail">
+      <div class="ticks" role="slider" :aria-valuenow="detail.index" :aria-valuemin="0" :aria-valuemax="detail.count - 1" aria-label="Keyframe">
+        <button
+          v-for="(s, i) in samples"
+          :key="s.token"
+          class="tick"
+          :class="{ current: i === detail.index, past: i < detail.index }"
+          :title="`Keyframe ${i + 1}, ${s.nbr_annotations} objects`"
+          @click="goToIndex(i)"
+        >
+          <span class="bar" :style="{ height: 25 + (75 * s.nbr_annotations) / maxAnnotations + '%' }"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="readout num" v-if="detail">
+      <span class="frame">Keyframe {{ detail.index + 1 }} of {{ detail.count }}</span>
+      <span class="muted">t = {{ detail.t_s.toFixed(1) }} s</span>
+      <span class="muted stamp">{{ formatTimestamp(detail.timestamp) }}</span>
+    </div>
+  </footer>
+</template>
+
+<style scoped>
+.timeline {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+.btn:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.play {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.speed {
+  margin-left: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  min-width: 36px;
+}
+.speed:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.scrubber {
+  min-width: 0;
+}
+.ticks {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+}
+.tick {
+  flex: 1 1 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 2px;
+}
+.tick .bar {
+  display: block;
+  width: 100%;
+  background: var(--line-strong);
+  border-radius: 2px;
+  transition: background 100ms;
+}
+.tick.past .bar {
+  background: #4b6a8a;
+}
+.tick.current .bar {
+  background: var(--accent);
+}
+.tick:hover .bar {
+  background: var(--text);
+}
+.readout {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.frame {
+  font-weight: 600;
+}
+.stamp {
+  font-size: 12px;
+}
+@media (max-width: 1300px) {
+  .stamp {
+    display: none;
+  }
+}
+</style>

@@ -1,2 +1,7 @@
 .DS_Store
 *.tar
+nuscenes/data/
+backend/.venv/
+__pycache__/
+frontend/node_modules/
+frontend/dist/
