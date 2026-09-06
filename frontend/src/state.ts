@@ -1,8 +1,9 @@
 import { reactive, shallowRef, watch } from 'vue'
-import { api, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSummary } from './api'
+import { api, type DepthFrame, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSummary, type SplatStatus } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
-export type ViewMode = 'explore' | 'depth' | 'fusion'
+export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat'
+export const VIEW_MODES: ViewMode[] = ['explore', 'depth', 'fusion', 'splat']
 export type FusionShading = 'photo' | 'lit' | 'normals'
 export type DepthTileMode = 'wipe' | 'depth' | 'error'
 export type DepthCloudColor = 'photo' | 'camera' | 'error'
@@ -27,6 +28,14 @@ export const fusionLayers = reactive({
   lidarOverlay: true,
   path: true,
   followEgo: true,
+})
+
+export const splatLayers = reactive({
+  views: 6 as 6 | 18,
+  posed: true,
+  lidar: true,
+  frustums: true,
+  rings: true,
 })
 
 export const layers = reactive({
@@ -134,6 +143,34 @@ watch(
   { immediate: true },
 )
 
+/** Build status of the Gaussian splat for the current keyframe and options. */
+export const splatStatus = shallowRef<SplatStatus | null>(null)
+let splatPoll = 0
+
+async function pollSplat() {
+  const id = ++splatPoll
+  const f = frame.value
+  if (!f || state.view !== 'splat') return
+  const { views, posed } = splatLayers
+  try {
+    const s = await api.splatStatus(f.detail.token, views, posed)
+    if (id !== splatPoll) return
+    splatStatus.value = s
+    if (s.state === 'running') window.setTimeout(() => id === splatPoll && pollSplat(), 2000)
+  } catch (e) {
+    if (id === splatPoll) splatStatus.value = { key: '', state: 'error', message: String(e) }
+  }
+}
+
+watch(
+  () => [state.view, frame.value?.detail.token, splatLayers.views, splatLayers.posed] as const,
+  ([view]) => {
+    splatStatus.value = null
+    if (view === 'splat') pollSplat()
+  },
+  { immediate: true },
+)
+
 /** Per-scene depth error, keyed by scene token. Filled lazily in the depth
  *  view: the current scene first, then the others one at a time so the
  *  backend is never asked to run inference for several scenes at once. */
@@ -212,10 +249,10 @@ export async function loadScene(token: string, index = 0) {
 }
 
 /** URL hash mirrors the view: #scene-0061/12/CAM_FRONT (scene, keyframe, open
- *  camera), or #depth/scene-0061/12 and #fusion/scene-0061/12 for the other views. */
+ *  camera), or #depth/…, #fusion/…, #splat/… for the other views. */
 function readHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/')
-  const view: ViewMode = parts[0] === 'depth' || parts[0] === 'fusion' ? parts[0] : 'explore'
+  const view: ViewMode = (VIEW_MODES as string[]).includes(parts[0]) && parts[0] !== 'explore' ? (parts[0] as ViewMode) : 'explore'
   if (view !== 'explore') parts.shift()
   const [name, index, cam] = parts
   return { view, name: name || null, index: index ? Number(index) - 1 : 0, cam: cam || null }

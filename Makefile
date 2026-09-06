@@ -4,7 +4,7 @@
 # Demo: `make demo` builds the UI and serves everything from one process
 # at http://localhost:8000.
 
-.PHONY: setup data data-bundle backend frontend build demo check depth-cache
+.PHONY: setup data data-bundle splat-setup backend frontend build demo check depth-cache
 
 setup:
 	cd backend && uv sync
@@ -15,6 +15,12 @@ data:
 
 data-bundle:
 	scripts/bundle_data.sh $(TAG)
+
+# Optional: the Gaussian splat view. Installs Depth Anything 3 in its own
+# environment and downloads its 6.8 GB checkpoint into data/models/da3.
+splat-setup:
+	cd tools/da3 && uv sync
+	scripts/fetch_da3.sh
 
 backend:
 	cd backend && uv run uvicorn app.main:app --reload --port 8000

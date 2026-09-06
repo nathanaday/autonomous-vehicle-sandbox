@@ -29,6 +29,7 @@ export function useThreeScene(host: Ref<HTMLElement | null>) {
   let renderer: THREE.WebGLRenderer | null = null
   let controls: OrbitControls | null = null
   const controlsRef = shallowRef<OrbitControls | null>(null)
+  const rendererRef = shallowRef<THREE.WebGLRenderer | null>(null)
   let raf = 0
   let ro: ResizeObserver | null = null
 
@@ -58,6 +59,7 @@ export function useThreeScene(host: Ref<HTMLElement | null>) {
     const el = host.value!
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio))
+    rendererRef.value = renderer
     el.appendChild(renderer.domElement)
     controls = new OrbitControls(camera, renderer.domElement)
     controlsRef.value = controls
@@ -96,7 +98,7 @@ export function useThreeScene(host: Ref<HTMLElement | null>) {
     renderer = null
   })
 
-  return { scene, camera, controls: controlsRef, rings, ego, preset, setView }
+  return { scene, camera, controls: controlsRef, renderer: rendererRef, rings, ego, preset, setView }
 }
 
 function buildRings(group: THREE.Group) {

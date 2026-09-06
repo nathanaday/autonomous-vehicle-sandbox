@@ -210,6 +210,38 @@ export interface FusionStatus {
   poses?: FusionPose[]
 }
 
+export interface SplatViewMeta {
+  channel: string
+  sample_token: string
+  sd_token: string
+  gaussian_fit_scale?: number
+  gaussian_fit_rms_m?: number
+  c2w?: Mat4
+  lidar?: { n: number; abs_rel: number; delta1: number; median_scale_to_lidar: number; abs_rel_after_scale: number }
+}
+
+export interface SplatStatus {
+  key: string
+  state: 'running' | 'ready' | 'error'
+  progress?: number
+  message?: string
+  tail?: string[]
+  sample_token?: string
+  model?: string
+  device?: string
+  posed?: boolean
+  process_res?: number[]
+  views?: SplatViewMeta[]
+  n_views?: number
+  n_gaussians?: number
+  n_gaussians_raw?: number
+  sky_fraction?: number | null
+  metric_scale_factor?: number | null
+  pose?: { similarity_scale: number; rotation_error_deg: number[]; position_error_m: number[] } | null
+  seconds?: { load: number; inference: number; total: number }
+  ply_bytes?: number
+}
+
 export const DEPTH_CLOUD_STRIDE = 7
 export const DEPTH_LIDAR_STRIDE = 5
 
@@ -251,6 +283,9 @@ export const api = {
   fusionStatus: (token: string, source: FusionSource, voxel: number, mask: boolean) =>
     getJson<FusionStatus>(`/api/scenes/${token}/fusion?source=${source}&voxel=${voxel}&mask=${mask}`),
   fusionMeshUrl: (key: string) => `/api/fusion/${key}.ply`,
+  splatStatus: (sampleToken: string, views: number, posed: boolean) =>
+    getJson<SplatStatus>(`/api/samples/${sampleToken}/splat?views=${views}&posed=${posed}`),
+  splatUrl: (key: string) => `/api/splat/${key}.ply`,
   depthImageUrl: (sdToken: string, width?: number) =>
     width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,
 }

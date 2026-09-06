@@ -14,6 +14,7 @@ const views: { id: ViewMode; label: string; hint: string }[] = [
   { id: 'explore', label: 'Sensors', hint: 'Every sensor in the raw dataset' },
   { id: 'depth', label: 'Depth Anything', hint: 'Stock monocular depth against the lidar' },
   { id: 'fusion', label: 'Fused mesh', hint: 'The whole scene fused into one surface' },
+  { id: 'splat', label: 'Gaussian splat', hint: 'Depth Anything 3 splat of one keyframe, no training' },
 ]
 
 function setView(v: ViewMode) {

@@ -10,6 +10,8 @@ import DepthCloudView from './components/DepthCloudView.vue'
 import DepthInspector from './components/DepthInspector.vue'
 import FusionView from './components/FusionView.vue'
 import FusionInspector from './components/FusionInspector.vue'
+import SplatView from './components/SplatView.vue'
+import SplatInspector from './components/SplatInspector.vue'
 import Timeline from './components/Timeline.vue'
 import CameraLightbox from './components/CameraLightbox.vue'
 import { loadScenes, state, stepFrame } from './state'
@@ -54,9 +56,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </div>
         <DepthInspector class="inspector" />
       </div>
-      <div class="stage" v-else>
+      <div class="stage" v-else-if="state.view === 'fusion'">
         <FusionView class="cloud" />
         <FusionInspector class="inspector" />
+      </div>
+      <div class="stage" v-else>
+        <SplatView class="cloud" />
+        <SplatInspector class="inspector" />
       </div>
       <Timeline />
     </main>

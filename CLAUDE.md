@@ -70,10 +70,17 @@ the data summary.
 - `backend/app/fusion.py` fuses a scene into one mesh with Open3D's TSDF
   volume from either camera depth or lidar, masks moving objects, and caches
   PLY files under `data/cache/fusion` (not in the data bundle).
+- `tools/da3/` is a separate uv environment running Depth Anything 3 (pins
+  numpy<2, so it cannot share the backend env). `splat_export.py` writes a 3DGS
+  PLY per keyframe; `backend/app/splat.py` runs it as a subprocess. Checkpoint
+  in `data/models/da3/`, outputs in `data/cache/splat/`. Two DA3 quirks are
+  worked around in the exporter and explained in its comments: the API's
+  pose-based depth rescale, and the Gaussian head's positions.
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
-  Three views, `explore`, `depth` and `fusion`, share
-  `composables/useThreeScene.ts`; only one is mounted at a time.
+  Four views, `explore`, `depth`, `fusion` and `splat`, share
+  `composables/useThreeScene.ts`; only one is mounted at a time. Splats render
+  through `@sparkjsdev/spark`, which needs three >= 0.180.
 - The nuScenes ego frame origin is at road level, not at axle height. Ground
   is z = 0; the lidar sweeps put it between -0.4 and 0 m.
 
@@ -94,6 +101,8 @@ in `data.manifest`. `make data-bundle` rebuilds that bundle from a local `data/`
 - `make demo` builds the UI and serves everything from http://localhost:8000.
 - `make depth-cache` runs Depth Anything over every keyframe camera image and
   the per-scene summaries, about eight minutes on an Apple GPU.
+- `make splat-setup` installs the Depth Anything 3 environment and downloads
+  its 6.8 GB checkpoint. Only needed for the Gaussian splat view.
 - `make check` type-checks the frontend. There are no automated tests yet.
 
 Take screenshots with puppeteer-core driving the installed Chrome when the

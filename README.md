@@ -109,6 +109,52 @@ first request, about 25 seconds, decimated to 700 000 triangles, and cached
 under `data/cache/fusion` as a 30 MB PLY. The fusion cache is not part of the
 data bundle.
 
+## Gaussian splat view
+
+![Gaussian splat of one keyframe from Depth Anything 3](docs/splat-view.jpg)
+
+The fourth view is a Gaussian splat of one keyframe from
+[Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3), with no
+per-scene training. The nested 1.4B-parameter model takes the six photos and
+returns, in one forward pass, a metric depth map, a sky mask, and one 3D
+Gaussian per pixel. On the Apple GPU the pass takes about 5 seconds for six
+views and 10 for twelve. The browser renders the result with
+[Spark](https://sparkjs.dev/), a Gaussian splat renderer for Three.js.
+
+- **Views.** The six cameras of the keyframe, or eighteen with the neighbouring
+  keyframes. More views give the model more overlap and lower the depth error
+  in every camera.
+- **Cameras.** Calibrated poses and intrinsics condition the model, or the
+  model estimates poses itself. The estimated result is anchored at the front
+  left camera so the other five show how far the estimate drifts, and the
+  inspector reports the rotation and position error per camera.
+- **Depth against lidar, no fitting.** Unlike the Depth Anything view, the
+  metric branch's scale is used as is. On scene 0061 that gives 13.5 percent
+  AbsRel from six views and 10.1 from twelve, next to 12.4 for Depth Anything
+  V2 with a per-image lidar fit.
+- **Overlays.** The lidar sweep, the camera frustums, the range rings and ego
+  car, all in the keyframe's ego frame.
+
+Two implementation notes. The API's final step rescales metric depth by a
+similarity fit between predicted and given camera centres; with six cameras a
+metre apart that fit is ill-conditioned and halved the depth, so the exporter
+skips it and keeps the metric branch's scale. And the Gaussian head's own
+positions disagreed with its depth map by a factor of 1.4 to 2.5, so the
+exporter keeps the model's rays, colors, opacities and shapes but places every
+Gaussian on the metric depth map along calibrated rays.
+
+Setup for this view is separate because Depth Anything 3 pins `numpy<2`:
+
+```sh
+make splat-setup    # its own uv environment under tools/da3, plus a 6.8 GB checkpoint
+```
+
+Splats build on first request, about 10 seconds each, and cache under
+`data/cache/splat` as 40 MB PLY files that any 3DGS viewer can open. Without
+the checkpoint the other three views work and this one reports the missing
+file. The checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
+the DA3 code installed by pip are Apache 2.0.
+
 ## Setup
 
 Requires Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), and Node
@@ -128,6 +174,8 @@ Everything large lives in `data/`, which git ignores:
 | `data/nuscenes/` | The extracted nuScenes `v1.0-mini` split | 5.1 GB |
 | `data/models/depth-anything-v2/` | `depth_anything_v2_vitb.pth` | 372 MB |
 | `data/cache/depth/` | Depth Anything output for every keyframe camera image, plus per-scene summaries | 559 MB |
+| `data/models/da3/` | Depth Anything 3 checkpoint for the splat view, fetched by `make splat-setup`, not in the bundle | 6.8 GB |
+| `data/cache/fusion/`, `data/cache/splat/` | Meshes and splats built on request, not in the bundle | grows |
 
 All three are packaged as one bundle on the repository's
 [releases page](https://github.com/nathanaday/autonomous-vehicle-sandbox/releases),
@@ -209,7 +257,11 @@ Open3D's scalable TSDF volume, masks moving objects using the annotation
 boxes, and writes binary PLY plus a JSON sidecar with stats and per-keyframe
 ego poses in the scene frame.
 
-`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The three
+`tools/da3/splat_export.py` runs Depth Anything 3 in its own environment and
+writes a 3DGS PLY in the ego frame; `backend/app/splat.py` launches it as a
+subprocess, follows its progress file, and serves the result.
+
+`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The four
 views share the Three.js scaffolding in `composables/useThreeScene.ts`, with
 the ego frame used directly as world coordinates, z up. The nuScenes ego
 origin is on the road surface. Only one view is mounted at a time so its

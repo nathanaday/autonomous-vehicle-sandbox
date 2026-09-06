@@ -1,0 +1,22 @@
+[project]
+name = "av-sandbox-da3"
+version = "0.1.0"
+description = "Runs Depth Anything 3 on nuScenes keyframes and exports Gaussian splats. Separate environment because DA3 pins numpy<2."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "depth-anything-3 @ git+https://github.com/ByteDance-Seed/Depth-Anything-3@3d835ec1a5802d64a8b8b15f817a1ab54809bfe4",
+    "torch>=2.4",
+    "torchvision",
+    "numpy<2",
+    "plyfile",
+    "safetensors",
+    "huggingface_hub",
+]
+
+[tool.uv]
+package = false
+# DA3 declares these but only needs them for CUDA builds, linting, or the demo app.
+override-dependencies = [
+    "xformers ; sys_platform == 'never'",
+    "pre-commit ; sys_platform == 'never'",
+]

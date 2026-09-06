@@ -2,26 +2,20 @@
 
 Ideas we have discussed and not built. Ordered roughly by how cheap they are.
 
-## Gaussian splat view from a feed-forward model
+## Gaussian splat view, done
 
-Add a fourth view that renders a Gaussian splat of one keyframe, produced
-without per-scene training.
+Built as the fourth view with Depth Anything 3 (nested Giant + metric Large)
+and the Spark renderer. Left over from that work:
 
-- Run a feed-forward reconstruction model on the six camera images of one
-  keyframe, or on a short run of sweeps from one camera. Candidates: Depth
-  Anything 3 (same family as our depth model, has a splat output in some
-  variants), VGGT, AnySplat, MASt3R. Check what each currently supports and
-  whether it accepts known intrinsics and poses, since nuScenes provides both.
-- Export the result as a splat `.ply` and serve it from the backend like the
-  fusion meshes.
-- Render it in the browser with an existing Three.js Gaussian splat renderer,
-  reusing the orbit controls and ego frame conventions from
-  `composables/useThreeScene.ts`.
-- Compare against the volumetric fusion mesh of the same keyframe.
-- If the results justify a GPU, fit one day scene and one night scene with a
-  driving-specific splatting codebase (Street Gaussians, OmniRe) on a rented
-  CUDA machine, using the 12 Hz sweeps and the annotation boxes for moving
-  objects, and load those splats in the same view.
+- Per-scene splat fitting on a CUDA machine (Street Gaussians, OmniRe) using the
+  12 Hz sweeps and the annotation boxes, then load those splats in the same
+  view next to the feed-forward one.
+- A Gaussian size slider in the viewer. Today the size multiplier is a build
+  option (`--scale-mult`, default 0.7).
+- Splats of several keyframes stitched along the trajectory, with moving
+  objects masked, as a splat counterpart to the fused mesh.
+- Try DA3's sky mask and confidence to prune more aggressively, and try the
+  higher processing resolution the model supports.
 
 ## Smaller items
 

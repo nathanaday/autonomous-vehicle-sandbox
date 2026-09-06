@@ -22,6 +22,7 @@ from PIL import Image
 from .depth import DepthEstimator
 from .fusion import SOURCES, VOXELS, FusionBuilder
 from .nuscenes import NuScenes
+from .splat import SplatBuilder
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
@@ -31,10 +32,13 @@ DEPTH_CHECKPOINT = Path(os.environ.get(
     "DEPTH_ANYTHING_CHECKPOINT", DATA / "models" / "depth-anything-v2" / "depth_anything_v2_vitb.pth"))
 DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", DATA / "cache" / "depth"))
 FUSION_CACHE = Path(os.environ.get("FUSION_CACHE", DATA / "cache" / "fusion"))
+SPLAT_CACHE = Path(os.environ.get("SPLAT_CACHE", DATA / "cache" / "splat"))
+DA3_MODEL_DIR = Path(os.environ.get("DA3_MODEL_DIR", DATA / "models" / "da3" / "DA3NESTED-GIANT-LARGE-1.1"))
 
 nusc = NuScenes(DATAROOT)
 depth_model = DepthEstimator(DEPTH_CHECKPOINT, DEPTH_CACHE)
 fusion = FusionBuilder(nusc, depth_model, FUSION_CACHE)
+splats = SplatBuilder(SPLAT_CACHE, DA3_MODEL_DIR)
 app = FastAPI(title="nuScenes sandbox")
 
 
@@ -237,6 +241,38 @@ def fusion_mesh(key: str):
     path = fusion.mesh_path(key)
     if not path.exists() or "/" in key or ".." in key:
         raise HTTPException(404, "no mesh with that key")
+    return FileResponse(path, media_type="application/octet-stream",
+                        headers={"Cache-Control": "max-age=86400"})
+
+
+# ----- Gaussian splats (Depth Anything 3) --------------------------------
+
+
+@app.get("/api/splat/info")
+def splat_info():
+    return splats.info()
+
+
+@app.get("/api/samples/{sample_token}/splat")
+def sample_splat(sample_token: str, views: int = Query(6), posed: bool = Query(True)):
+    """Status of the Gaussian splat for one keyframe. Starts the DA3 run in the
+    background if it is not cached; poll until state is 'ready', then fetch
+    /api/splat/{key}.ply."""
+    _get("sample", sample_token)
+    if views not in (6, 18):
+        raise HTTPException(400, "views must be 6 or 18")
+    if not splats.available:
+        raise HTTPException(503, f"Depth Anything 3 checkpoint not found at {DA3_MODEL_DIR}. "
+                                 "See README, Gaussian splat view.")
+    return splats.status(sample_token, views, posed)
+
+
+@app.get("/api/splat/{key}.ply")
+def splat_ply(key: str):
+    """3DGS-format PLY in the ego frame of the keyframe."""
+    path = splats.ply_path(key)
+    if "/" in key or ".." in key or not path.exists():
+        raise HTTPException(404, "no splat with that key")
     return FileResponse(path, media_type="application/octet-stream",
                         headers={"Cache-Control": "max-age=86400"})
 
