@@ -41,20 +41,44 @@ git clone https://github.com/nathanaday/autonomous-vehicle-sandbox.git
 cd autonomous-vehicle-sandbox
 ```
 
-### Provided `make` instructions
+### Basic Setup (<2 min)
 
 ```sh
-make setup 
+make setup  # python venv + npm frontend deps
+```
+
+```sh
+make data  # downloads nuscenes 
+```
+
+```sh
+make demo  # starts the app
 ```
 
 > `setup` uses `uv`, creates `backend/.venv` and installs Python deps; `npm` installs frontend deps
 
+> `make demo` builds the UI and serves it on one port (`8000`)
+
+**Access the Data Viewer:**
+
+> <http://localhost:8000>
+
+
+### Adding Depth, Fusion, Splat Data Views
+
+> Downloads the pre-computed data needed for the extra views. 
+> Note: You can run any or all of these depending on what you want to see
+
 
 ```sh
-make data
+make data-depth    # Depth Anything predictions
+make data-fusion   # fused meshes
+make data-splat    # Gaussian splats
 ```
 
-> Downloads the `NuScenes` data from the repo's releases page
+Restart the demo server, and the corresponding data view tab will be unlocked.
+
+### Extra `make` instructions
 
 ```sh
 make backend
@@ -68,20 +92,6 @@ make frontend
 
 > Starts the frontend server (`vite` dev server) 
 > <http://localhost:5173>. 
-
-```sh
-make data-depth    # Depth Anything predictions: Depth Anything view
-make data-fusion   # fused meshes: Fused mesh view
-make data-splat    # Gaussian splats: Gaussian splat view
-```
-
-> Downloads the precomputed results that unlock the other three views (depth, fusion, splat, respectively) - note you can run any or all of these depending on what you want to see
-
-```sh
-make demo
-```
-
-> For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
 
 ---
 
