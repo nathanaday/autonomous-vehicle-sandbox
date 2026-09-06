@@ -7,6 +7,20 @@ drove. The point of the tool is to make the shape of the data obvious before
 choosing a project direction. See `depth-anything-av-application.md` for the
 research context.
 
+> [!NOTE]
+> **Quickstart.** Needs Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), Node 20 or newer, and about 11 GB of free disk.
+>
+> ```sh
+> git clone https://github.com/nathanaday/autonomous-vehicle-sandbox.git
+> cd autonomous-vehicle-sandbox
+> make setup       # uv creates backend/.venv and installs Python deps; npm installs frontend deps
+> make data        # downloads the 4.6 GB data bundle from GitHub releases and extracts it into data/
+> make backend     # terminal 1: FastAPI on http://localhost:8000
+> make frontend    # terminal 2: Vite dev server on http://localhost:5173
+> ```
+>
+> Open <http://localhost:5173>. For a single process instead of two, `make demo` builds the UI and serves it with the API on <http://localhost:8000>.
+
 ![Night scene after rain](docs/screenshot.jpg)
 
 ## Layout
