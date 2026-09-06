@@ -63,11 +63,18 @@ the data summary.
 - `backend/app/main.py` is the FastAPI app. JSON for scenes and frames, binary
   `Float32Array` for lidar and radar, resized JPEGs for cameras. Serves
   `frontend/dist` at `/` when it exists.
+- `backend/app/depth.py` runs stock Depth Anything V2 (vendored model code in
+  `backend/app/depth_anything_v2`, checkpoint in `models/`, gitignored),
+  caches predictions under `nuscenes/cache/depth`, fits each image to the
+  lidar with a scale and shift, and reports AbsRel, RMSE, δ1.
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
+  Two views, `explore` and `depth`, share `composables/useThreeScene.ts`; only
+  one is mounted at a time.
 
-Only keyframes are exposed. Sweeps, map rasters, and any model inference are
-not wired up yet.
+Only keyframes are exposed. Sweeps and map rasters are not wired up. No
+training code exists yet; the depth view is the stock baseline both stubs
+compare against.
 
 ## Commands
 
@@ -77,14 +84,12 @@ Dataset: extract `nuscenes/v1.0-mini.tar` into `nuscenes/data/` (gitignored).
 - `make backend` and `make frontend` run the two dev servers. Open
   http://localhost:5173.
 - `make demo` builds the UI and serves everything from http://localhost:8000.
+- `make depth-cache` runs Depth Anything over every keyframe camera image and
+  the per-scene summaries, about eight minutes on an Apple GPU.
 - `make check` type-checks the frontend. There are no automated tests yet.
 
-Take screenshots with headless Chrome when the browser extension is not
-connected:
-
-```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
-  --disable-gpu --use-angle=swiftshader --enable-unsafe-swiftshader \
-  --hide-scrollbars --window-size=1600,1000 --virtual-time-budget=8000 \
-  --screenshot=out.png "http://localhost:5173/#scene-1094/20"
-```
+Take screenshots with puppeteer-core driving the installed Chrome when the
+browser extension is not connected. Chrome's own `--screenshot` flag hangs on
+this app. A helper that loads a URL, clicks buttons by their text, waits, and
+saves a PNG while reporting console errors is about 30 lines; keep it in the
+scratchpad, not the repo.

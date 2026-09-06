@@ -12,18 +12,24 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+import numpy as np
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
+from .depth import DepthEstimator
 from .nuscenes import NuScenes
 
 ROOT = Path(__file__).resolve().parents[2]
 DATAROOT = Path(os.environ.get("NUSCENES_DATAROOT", ROOT / "nuscenes" / "data"))
 FRONTEND_DIST = ROOT / "frontend" / "dist"
+DEPTH_CHECKPOINT = Path(os.environ.get(
+    "DEPTH_ANYTHING_CHECKPOINT", ROOT / "models" / "depth-anything-v2" / "depth_anything_v2_vitb.pth"))
+DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", ROOT / "nuscenes" / "cache" / "depth"))
 
 nusc = NuScenes(DATAROOT)
+depth_model = DepthEstimator(DEPTH_CHECKPOINT, DEPTH_CACHE)
 app = FastAPI(title="nuScenes sandbox")
 
 
@@ -88,6 +94,112 @@ def image(sd_token: str, w: int | None = Query(None, ge=64, le=1600)):
     if w is None:
         return FileResponse(DATAROOT / sd["filename"], media_type="image/jpeg", headers=headers)
     return Response(_resized_jpeg(sd["filename"], w), media_type="image/jpeg", headers=headers)
+
+
+# ----- depth estimation ---------------------------------------------------
+
+
+def _require_depth():
+    if not depth_model.available:
+        raise HTTPException(
+            503, f"Depth Anything checkpoint not found at {DEPTH_CHECKPOINT}. "
+            "Set DEPTH_ANYTHING_CHECKPOINT to the .pth file.")
+
+
+@app.get("/api/depth/info")
+def depth_info():
+    return depth_model.info()
+
+
+@app.get("/api/samples/{sample_token}/depth")
+def sample_depth(sample_token: str):
+    """Per-camera fit of the stock model against the lidar sweep."""
+    _get("sample", sample_token)
+    _require_depth()
+    frame = nusc.frame(sample_token)
+    cams = depth_model.frame_depth(nusc, frame)
+    z = np.concatenate([c.z_lidar for c in cams])
+    zp = np.concatenate([c.z_pred for c in cams])
+    ratio = np.maximum(zp / z, z / zp)
+    return {
+        "token": sample_token,
+        "model": depth_model.info(),
+        "cameras": [
+            {
+                "channel": c.channel,
+                "sd_token": c.sd_token,
+                "pred_shape": list(c.pred.shape),
+                "scale": c.scale,
+                "shift": c.shift,
+                "n_lidar": c.n_lidar,
+                "abs_rel": c.abs_rel,
+                "rmse": c.rmse,
+                "delta1": c.delta1,
+            }
+            for c in cams
+        ],
+        "overall": {
+            "n_lidar": int(len(z)),
+            "abs_rel": float(np.mean(np.abs(zp - z) / z)),
+            "rmse": float(np.sqrt(np.mean((zp - z) ** 2))),
+            "delta1": float(np.mean(ratio < 1.25)),
+        },
+    }
+
+
+@app.get("/api/scenes/{scene_token}/depth")
+def scene_depth(scene_token: str):
+    """Depth error per keyframe across one scene. Slow on first call for a
+    scene whose predictions are not cached yet (about 0.2 s per image)."""
+    _get("scene", scene_token)
+    _require_depth()
+    return depth_model.scene_summary(nusc, scene_token)
+
+
+@app.get("/api/samples/{sample_token}/depthcloud.bin")
+def sample_depth_cloud(sample_token: str, stride: int = Query(3, ge=1, le=8)):
+    """Float32, 7 per point: x y z r g b camera_index (ref ego frame)."""
+    _get("sample", sample_token)
+    _require_depth()
+    frame = nusc.frame(sample_token)
+    cams = depth_model.frame_depth(nusc, frame)
+    pts = depth_model.depth_cloud(nusc, frame, cams, stride=stride)
+    return Response(pts.tobytes(), media_type="application/octet-stream",
+                    headers={"X-Stride": "7", "Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/samples/{sample_token}/depthlidar.bin")
+def sample_depth_lidar(sample_token: str):
+    """Float32, 5 per point: camera_index u v z_lidar z_pred. The lidar points
+    used to fit each camera, with the model's fitted depth at the same pixel."""
+    _get("sample", sample_token)
+    _require_depth()
+    frame = nusc.frame(sample_token)
+    cams = depth_model.frame_depth(nusc, frame)
+    parts = [
+        np.stack([np.full_like(c.u, i), c.u, c.v, c.z_lidar, c.z_pred], axis=1)
+        for i, c in enumerate(cams)
+    ]
+    pts = np.concatenate(parts).astype(np.float32)
+    return Response(pts.tobytes(), media_type="application/octet-stream",
+                    headers={"X-Stride": "5", "Cache-Control": "max-age=3600"})
+
+
+@lru_cache(maxsize=2048)
+def _depth_png(sd_token: str, width: int | None) -> bytes:
+    sd = nusc.get("sample_data", sd_token)
+    pred = depth_model.predict(sd_token, DATAROOT / sd["filename"])
+    return depth_model.colorized_png(pred, width)
+
+
+@app.get("/api/depth/{sd_token}.png")
+def depth_image(sd_token: str, w: int | None = Query(None, ge=64, le=1600)):
+    sd = _get("sample_data", sd_token)
+    _require_depth()
+    if sd["fileformat"] != "jpg":
+        raise HTTPException(400, "not an image")
+    return Response(_depth_png(sd_token, w), media_type="image/png",
+                    headers={"Cache-Control": "max-age=86400"})
 
 
 if FRONTEND_DIST.exists():

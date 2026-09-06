@@ -1,7 +1,21 @@
 import { reactive, shallowRef, watch } from 'vue'
-import { api, type Frame, type SceneDetail, type SceneSummary } from './api'
+import { api, type DepthFrame, type Frame, type SceneDepthSummary, type SceneDetail, type SceneSummary } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
+export type ViewMode = 'explore' | 'depth'
+export type DepthTileMode = 'wipe' | 'depth' | 'error'
+export type DepthCloudColor = 'photo' | 'camera' | 'error'
+
+export const depthLayers = reactive({
+  tile: 'wipe' as DepthTileMode,
+  wipe: 0.5,
+  prediction: true,
+  lidar: true,
+  cloudColor: 'photo' as DepthCloudColor,
+  pointSize: 2.2,
+  maxRange: 60,
+  cameras: {} as Record<string, boolean>,
+})
 
 export const layers = reactive({
   lidar: true,
@@ -28,10 +42,86 @@ export const state = reactive({
   fps: 2,
   lightboxCamera: null as string | null,
   hoveredAnnotation: null as string | null,
+  view: 'explore' as ViewMode,
+  loadingDepth: false,
+  depthError: null as string | null,
 })
 
 /** Current frame. shallowRef because the typed arrays are large and never mutate. */
 export const frame = shallowRef<Frame | null>(null)
+
+/** Depth Anything output for the current frame, loaded only in the depth view. */
+export const depth = shallowRef<DepthFrame | null>(null)
+
+const depthCache = new Map<string, Promise<DepthFrame>>()
+
+function fetchDepth(token: string): Promise<DepthFrame> {
+  let p = depthCache.get(token)
+  if (!p) {
+    p = api.depth(token)
+    depthCache.set(token, p)
+    p.catch(() => depthCache.delete(token))
+  }
+  return p
+}
+
+let depthRequest = 0
+
+async function loadDepth(token: string, next: string | null) {
+  const id = ++depthRequest
+  state.loadingDepth = true
+  try {
+    const d = await fetchDepth(token)
+    if (id !== depthRequest) return
+    depth.value = d
+    state.depthError = null
+    if (next) fetchDepth(next)
+  } catch (e) {
+    if (id === depthRequest) state.depthError = String(e)
+  } finally {
+    if (id === depthRequest) state.loadingDepth = false
+  }
+}
+
+watch(
+  () => [state.view, frame.value] as const,
+  ([view, f]) => {
+    if (view !== 'depth' || !f) return
+    if (depth.value?.detail.token !== f.detail.token) loadDepth(f.detail.token, f.detail.next)
+  },
+  { immediate: true },
+)
+
+/** Per-scene depth error, keyed by scene token. Filled lazily in the depth
+ *  view: the current scene first, then the others one at a time so the
+ *  backend is never asked to run inference for several scenes at once. */
+export const depthScenes = reactive<Record<string, SceneDepthSummary>>({})
+const depthScenesPending = new Set<string>()
+
+async function loadDepthScenes() {
+  const current = state.scene?.token
+  const order = [...state.scenes].sort((a, b) => (a.token === current ? -1 : b.token === current ? 1 : 0))
+  for (const s of order) {
+    if (state.view !== 'depth') return
+    if (depthScenes[s.token] || depthScenesPending.has(s.token)) continue
+    depthScenesPending.add(s.token)
+    try {
+      depthScenes[s.token] = await api.sceneDepth(s.token)
+    } catch {
+      // leave it missing; the UI simply shows no badge for this scene
+    } finally {
+      depthScenesPending.delete(s.token)
+    }
+  }
+}
+
+watch(
+  () => [state.view, state.scene?.token, state.scenes.length] as const,
+  ([view]) => {
+    if (view === 'depth') loadDepthScenes()
+  },
+  { immediate: true },
+)
 
 const frameCache = new Map<string, Promise<Frame>>()
 
@@ -79,29 +169,35 @@ export async function loadScene(token: string, index = 0) {
   }
 }
 
-/** URL hash mirrors the view: #scene-0061/12/CAM_FRONT (scene, keyframe, open camera). */
+/** URL hash mirrors the view: #scene-0061/12/CAM_FRONT (scene, keyframe, open
+ *  camera), or #depth/scene-0061/12 for the depth view. */
 function readHash() {
-  const [name, index, cam] = location.hash.replace(/^#\/?/, '').split('/')
-  return { name: name || null, index: index ? Number(index) - 1 : 0, cam: cam || null }
+  const parts = location.hash.replace(/^#\/?/, '').split('/')
+  const view: ViewMode = parts[0] === 'depth' ? 'depth' : 'explore'
+  if (view === 'depth') parts.shift()
+  const [name, index, cam] = parts
+  return { view, name: name || null, index: index ? Number(index) - 1 : 0, cam: cam || null }
 }
 
 function writeHash() {
   const f = frame.value
   if (!f) return
   const parts = [f.detail.scene_name, String(f.detail.index + 1)]
-  if (state.lightboxCamera) parts.push(state.lightboxCamera)
+  if (state.view === 'depth') parts.unshift('depth')
+  else if (state.lightboxCamera) parts.push(state.lightboxCamera)
   const next = '#' + parts.join('/')
   if (location.hash !== next) history.replaceState(null, '', next)
 }
 
-watch([frame, () => state.lightboxCamera], writeHash)
+watch([frame, () => state.lightboxCamera, () => state.view], writeHash)
 
 export async function loadScenes() {
   state.scenes = await api.scenes()
   if (!state.scenes.length || state.scene) return
   const h = readHash()
   const scene = state.scenes.find((s) => s.name === h.name) ?? state.scenes[0]
-  state.lightboxCamera = h.cam
+  state.view = h.view
+  state.lightboxCamera = h.view === 'explore' ? h.cam : null
   await loadScene(scene.token, h.index)
 }
 

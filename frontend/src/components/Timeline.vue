@@ -1,11 +1,30 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatTimestamp } from '../geometry'
-import { frame, goToIndex, state, stepFrame } from '../state'
+import { depthScenes, frame, goToIndex, state, stepFrame } from '../state'
 
 const detail = computed(() => frame.value?.detail ?? null)
 const samples = computed(() => state.scene?.samples ?? [])
 const maxAnnotations = computed(() => Math.max(1, ...samples.value.map((s) => s.nbr_annotations)))
+
+/** In the depth view the bars show depth error per keyframe instead of
+ *  object count, once the scene summary has loaded. */
+const errors = computed(() => {
+  if (state.view !== 'depth' || !state.scene) return null
+  const summary = depthScenes[state.scene.token]
+  if (!summary) return null
+  return new Map(summary.frames.map((f) => [f.token, f.abs_rel]))
+})
+const maxError = computed(() => (errors.value ? Math.max(0.01, ...errors.value.values()) : 1))
+
+function barHeight(s: { token: string; nbr_annotations: number }) {
+  if (errors.value) return 15 + (85 * (errors.value.get(s.token) ?? 0)) / maxError.value
+  return 25 + (75 * s.nbr_annotations) / maxAnnotations.value
+}
+function barTitle(s: { token: string; nbr_annotations: number }, i: number) {
+  const e = errors.value?.get(s.token)
+  return e !== undefined ? `Keyframe ${i + 1}, AbsRel ${(e * 100).toFixed(1)}%` : `Keyframe ${i + 1}, ${s.nbr_annotations} objects`
+}
 const speeds = [1, 2, 5, 10]
 
 function cycleSpeed() {
@@ -39,10 +58,10 @@ function cycleSpeed() {
           :key="s.token"
           class="tick"
           :class="{ current: i === detail.index, past: i < detail.index }"
-          :title="`Keyframe ${i + 1}, ${s.nbr_annotations} objects`"
+          :title="barTitle(s, i)"
           @click="goToIndex(i)"
         >
-          <span class="bar" :style="{ height: 25 + (75 * s.nbr_annotations) / maxAnnotations + '%' }"></span>
+          <span class="bar" :style="{ height: barHeight(s) + '%' }"></span>
         </button>
       </div>
     </div>
@@ -50,6 +69,7 @@ function cycleSpeed() {
     <div class="readout num" v-if="detail">
       <span class="frame">Keyframe {{ detail.index + 1 }} of {{ detail.count }}</span>
       <span class="muted">t = {{ detail.t_s.toFixed(1) }} s</span>
+      <span class="muted bars-hint" v-if="errors">bars: depth error per keyframe</span>
       <span class="muted stamp">{{ formatTimestamp(detail.timestamp) }}</span>
     </div>
   </footer>
@@ -138,7 +158,8 @@ function cycleSpeed() {
 .frame {
   font-weight: 600;
 }
-.stamp {
+.stamp,
+.bars-hint {
   font-size: 12px;
 }
 @media (max-width: 1300px) {

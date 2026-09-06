@@ -1,76 +1,40 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { LIDAR_STRIDE, RADAR_STRIDE, type Frame } from '../api'
 import { BOX_EDGES, boxCorners, categoryColor, COLORS, heightColor, intensityColor, depthColor, srgbToLinear } from '../geometry'
+import { GROUND_Z, setPoints, useThreeScene } from '../composables/useThreeScene'
 import { frame, layers, state } from '../state'
 
 const host = ref<HTMLDivElement | null>(null)
-
-const scene = new THREE.Scene()
-scene.background = new THREE.Color('#0f1620')
-const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 600)
-camera.up.set(0, 0, 1)
-let renderer: THREE.WebGLRenderer | null = null
-let controls: OrbitControls | null = null
-let raf = 0
+const { scene, rings, ego, preset, setView } = useThreeScene(host)
 
 // ----- persistent objects, updated in place per frame -----
 
 const lidarGeom = new THREE.BufferGeometry()
 const lidarMat = new THREE.PointsMaterial({ size: layers.pointSize, vertexColors: true, sizeAttenuation: false })
 const lidar = new THREE.Points(lidarGeom, lidarMat)
-lidar.frustumCulled = false
 
 const radarGeom = new THREE.BufferGeometry()
-const radarMat = new THREE.PointsMaterial({ size: 7, color: COLORS.radar, sizeAttenuation: false })
-const radar = new THREE.Points(radarGeom, radarMat)
-radar.frustumCulled = false
+const radar = new THREE.Points(radarGeom, new THREE.PointsMaterial({ size: 7, color: COLORS.radar, sizeAttenuation: false }))
 
 const radarVelGeom = new THREE.BufferGeometry()
 const radarVel = new THREE.LineSegments(radarVelGeom, new THREE.LineBasicMaterial({ color: COLORS.radar, transparent: true, opacity: 0.8 }))
-radarVel.frustumCulled = false
 
 const boxGeom = new THREE.BufferGeometry()
 const boxes = new THREE.LineSegments(boxGeom, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 }))
-boxes.frustumCulled = false
 
 const pathGeom = new THREE.BufferGeometry()
-const path = new THREE.Line(pathGeom, new THREE.LineBasicMaterial({ color: COLORS.path }))
 const pathDotsGeom = new THREE.BufferGeometry()
-const pathDots = new THREE.Points(pathDotsGeom, new THREE.PointsMaterial({ size: 4, color: '#8fa3ba', sizeAttenuation: false }))
 const pathGroup = new THREE.Group()
-pathGroup.add(path, pathDots)
+pathGroup.add(
+  new THREE.Line(pathGeom, new THREE.LineBasicMaterial({ color: COLORS.path })),
+  new THREE.Points(pathDotsGeom, new THREE.PointsMaterial({ size: 4, color: '#8fa3ba', sizeAttenuation: false })),
+)
 
 const sensorsGroup = new THREE.Group()
-const ringsGroup = new THREE.Group()
-const egoGroup = new THREE.Group()
-
-scene.add(lidar, radar, radarVel, boxes, pathGroup, sensorsGroup, ringsGroup, egoGroup)
-
-function buildStatic() {
-  // range rings every 10 m, brighter at 50 m
-  for (let r = 10; r <= 100; r += 10) {
-    const pts: THREE.Vector3[] = []
-    for (let i = 0; i <= 128; i++) {
-      const a = (i / 128) * Math.PI * 2
-      pts.push(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, -1.75))
-    }
-    const g = new THREE.BufferGeometry().setFromPoints(pts)
-    const strong = r % 50 === 0
-    ringsGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: strong ? '#34435a' : '#1f2a38' })))
-  }
-  // heading line down the x axis
-  const axis = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -1.75), new THREE.Vector3(100, 0, -1.75)])
-  ringsGroup.add(new THREE.Line(axis, new THREE.LineBasicMaterial({ color: '#1f2a38' })))
-
-  // ego car outline: nuScenes ego frame sits at the rear axle center at ground level
-  const ego = new THREE.BoxGeometry(4.1, 1.85, 1.55)
-  ego.translate(1.25, 0, 0.775 - 1.75 + 0.3)
-  const edges = new THREE.EdgesGeometry(ego)
-  egoGroup.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: COLORS.ego, transparent: true, opacity: 0.7 })))
-}
+for (const o of [lidar, radar, radarVel, boxes]) o.frustumCulled = false
+scene.add(lidar, radar, radarVel, boxes, pathGroup, sensorsGroup)
 
 function setSensors(f: Frame) {
   sensorsGroup.clear()
@@ -82,7 +46,6 @@ function setSensors(f: Frame) {
   mk(d.lidar.translation, COLORS.lidar, 9)
   for (const r of d.radars) {
     mk(r.translation, COLORS.radar, 7)
-    // radar boresight: a short line in the sensor's facing direction
     const yaw = (r.yaw_deg * Math.PI) / 180
     const g = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(r.translation[0], r.translation[1], r.translation[2]),
@@ -92,13 +55,10 @@ function setSensors(f: Frame) {
   }
   for (const c of d.cameras) {
     mk(c.translation, COLORS.camera, 6)
-    // frustum: four rays from the optical center to the image corners at 1.5 m
     const m = c.cam_to_ref
     const K = c.intrinsic
     const depth = 1.5
-    const corners = [
-      [0, 0], [c.width, 0], [c.width, c.height], [0, c.height],
-    ].map(([u, v]) => {
+    const corners = [[0, 0], [c.width, 0], [c.width, c.height], [0, c.height]].map(([u, v]) => {
       const x = ((u - K[0][2]) / K[0][0]) * depth
       const y = ((v - K[1][2]) / K[1][1]) * depth
       return new THREE.Vector3(
@@ -109,9 +69,7 @@ function setSensors(f: Frame) {
     })
     const o = new THREE.Vector3(m[0][3], m[1][3], m[2][3])
     const pts: THREE.Vector3[] = []
-    for (let i = 0; i < 4; i++) {
-      pts.push(o, corners[i], corners[i], corners[(i + 1) % 4])
-    }
+    for (let i = 0; i < 4; i++) pts.push(o, corners[i], corners[i], corners[(i + 1) % 4])
     const g = new THREE.BufferGeometry().setFromPoints(pts)
     sensorsGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: COLORS.camera, transparent: true, opacity: 0.35 })))
   }
@@ -122,20 +80,20 @@ function setLidar(f: Frame) {
   const pos = new Float32Array(n * 3)
   const col = new Float32Array(n * 3)
   for (let i = 0; i < n; i++) {
-    const x = f.lidar[i * LIDAR_STRIDE], y = f.lidar[i * LIDAR_STRIDE + 1], z = f.lidar[i * LIDAR_STRIDE + 2]
+    const b = i * LIDAR_STRIDE
+    const x = f.lidar[b], y = f.lidar[b + 1], z = f.lidar[b + 2]
     pos[i * 3] = x
     pos[i * 3 + 1] = y
     pos[i * 3 + 2] = z
     let c: [number, number, number]
-    if (layers.lidarColor === 'intensity') c = intensityColor(f.lidar[i * LIDAR_STRIDE + 3])
+    if (layers.lidarColor === 'intensity') c = intensityColor(f.lidar[b + 3])
     else if (layers.lidarColor === 'distance') c = depthColor(Math.hypot(x, y))
     else c = heightColor(z)
     col[i * 3] = srgbToLinear(c[0] / 255)
     col[i * 3 + 1] = srgbToLinear(c[1] / 255)
     col[i * 3 + 2] = srgbToLinear(c[2] / 255)
   }
-  lidarGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  lidarGeom.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  setPoints(lidarGeom, pos, col)
 }
 
 function setRadar(f: Frame) {
@@ -149,8 +107,8 @@ function setRadar(f: Frame) {
     // 0.5 s of compensated velocity, so 10 m/s reads as a 5 m streak
     vel.set([x, y, z, x + f.radar[b + 3] * 0.5, y + f.radar[b + 4] * 0.5, z], i * 6)
   }
-  radarGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  radarVelGeom.setAttribute('position', new THREE.BufferAttribute(vel, 3))
+  setPoints(radarGeom, pos)
+  setPoints(radarVelGeom, vel)
 }
 
 function setBoxes(f: Frame) {
@@ -170,12 +128,11 @@ function setBoxes(f: Frame) {
       k += 6
     }
   }
-  boxGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  boxGeom.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  setPoints(boxGeom, pos, col)
 }
 
 function setPath(f: Frame) {
-  const pts = f.detail.trajectory.map((t) => new THREE.Vector3(t.position[0], t.position[1], t.position[2] - 1.75 + 0.05))
+  const pts = f.detail.trajectory.map((t) => new THREE.Vector3(t.position[0], t.position[1], t.position[2] + GROUND_Z + 0.05))
   pathGeom.setFromPoints(pts)
   pathDotsGeom.setFromPoints(pts)
 }
@@ -187,69 +144,10 @@ function applyLayers() {
   boxes.visible = layers.boxes
   pathGroup.visible = layers.trajectory
   sensorsGroup.visible = layers.sensors
-  ringsGroup.visible = layers.rings
-  egoGroup.visible = layers.sensors || layers.rings
+  rings.visible = layers.rings
+  ego.visible = layers.sensors || layers.rings
   lidarMat.size = layers.pointSize
 }
-
-// ----- view presets -----
-
-type Preset = 'chase' | 'top' | 'side'
-const preset = ref<Preset>('chase')
-function setView(p: Preset) {
-  preset.value = p
-  if (!controls) return
-  controls.target.set(8, 0, 0)
-  if (p === 'chase') camera.position.set(-18, -13, 11)
-  else if (p === 'top') {
-    controls.target.set(0, 0, 0)
-    camera.position.set(0.01, 0, 90)
-  } else camera.position.set(6, -45, 6)
-  controls.update()
-}
-
-// ----- lifecycle -----
-
-function resize() {
-  const el = host.value
-  if (!el || !renderer) return
-  const w = el.clientWidth, h = el.clientHeight
-  renderer.setSize(w, h, false)
-  camera.aspect = w / h
-  camera.updateProjectionMatrix()
-}
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  const el = host.value!
-  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio))
-  el.appendChild(renderer.domElement)
-  controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true
-  controls.dampingFactor = 0.12
-  controls.maxDistance = 300
-  controls.minDistance = 2
-  controls.maxPolarAngle = Math.PI / 2 - 0.02
-  buildStatic()
-  setView('chase')
-  resize()
-  ro = new ResizeObserver(resize)
-  ro.observe(el)
-  const loop = () => {
-    controls!.update()
-    renderer!.render(scene, camera)
-    raf = requestAnimationFrame(loop)
-  }
-  loop()
-  if (frame.value) update(frame.value)
-})
-onUnmounted(() => {
-  cancelAnimationFrame(raf)
-  ro?.disconnect()
-  controls?.dispose()
-  renderer?.dispose()
-})
 
 function update(f: Frame) {
   setLidar(f)
@@ -260,7 +158,7 @@ function update(f: Frame) {
   applyLayers()
 }
 
-watch(frame, (f) => f && update(f))
+watch(frame, (f) => f && update(f), { immediate: true })
 watch(() => layers.lidarColor, () => frame.value && setLidar(frame.value))
 watch(() => state.hoveredAnnotation, () => frame.value && setBoxes(frame.value))
 watch(layers, applyLayers)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { api, type CameraFrame } from '../api'
-import { coverTransform, horizontalFovDeg } from '../geometry'
+import { channelLabel, coverTransform, horizontalFovDeg } from '../geometry'
 import { drawOverlay } from '../overlay'
 import { frame, layers, state } from '../state'
 
@@ -67,7 +67,7 @@ onUnmounted(() => ro?.disconnect())
     <button class="image" ref="box" @click="state.lightboxCamera = cam.channel" :title="`Open ${cam.channel}`">
       <img :src="shown" :alt="cam.channel" @load="loaded = true" decoding="async" />
       <canvas ref="canvas" class="overlay"></canvas>
-      <span class="label">{{ cam.channel.replace('CAM_', '').replace('_', ' ').toLowerCase() }}</span>
+      <span class="label">{{ channelLabel(cam.channel) }}</span>
     </button>
     <div class="meta num muted">
       <span>{{ cam.width }}×{{ cam.height }}</span>
@@ -115,7 +115,6 @@ onUnmounted(() => ro?.disconnect())
   font-weight: 600;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-  text-transform: capitalize;
 }
 .image:hover .label {
   text-decoration: underline;

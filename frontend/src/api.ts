@@ -130,6 +130,61 @@ export interface Frame {
 export const LIDAR_STRIDE = 5
 export const RADAR_STRIDE = 8
 
+export interface DepthModelInfo {
+  model: string
+  checkpoint: string
+  available: boolean
+  device: string
+  output: string
+  last_inference_s: number | null
+}
+
+export interface DepthMetrics {
+  n_lidar: number
+  abs_rel: number
+  rmse: number
+  delta1: number
+}
+
+export interface CameraDepthStats extends DepthMetrics {
+  channel: string
+  sd_token: string
+  pred_shape: number[]
+  scale: number
+  shift: number
+}
+
+export interface DepthDetail {
+  token: string
+  model: DepthModelInfo
+  cameras: CameraDepthStats[]
+  overall: DepthMetrics
+}
+
+/** cloud: 7 floats per point (x y z r g b camera_index) in the reference ego
+ *  frame. lidar: 5 floats per point (camera_index u v z_lidar z_pred). */
+export interface DepthFrame {
+  detail: DepthDetail
+  cloud: Float32Array
+  lidar: Float32Array
+}
+
+export interface SceneDepthFrame extends DepthMetrics {
+  token: string
+  cameras: Record<string, number>
+}
+
+export interface SceneDepthSummary {
+  scene_token: string
+  frames: SceneDepthFrame[]
+  abs_rel: number
+  rmse: number
+  delta1: number
+}
+
+export const DEPTH_CLOUD_STRIDE = 7
+export const DEPTH_LIDAR_STRIDE = 5
+
 async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url)
   if (!r.ok) throw new Error(`${r.status} ${url}`)
@@ -155,4 +210,16 @@ export const api = {
   },
   imageUrl: (sdToken: string, width?: number) =>
     width ? `/api/image/${sdToken}?w=${width}` : `/api/image/${sdToken}`,
+  depthInfo: () => getJson<DepthModelInfo>('/api/depth/info'),
+  async depth(token: string): Promise<DepthFrame> {
+    const [detail, cloud, lidar] = await Promise.all([
+      getJson<DepthDetail>(`/api/samples/${token}/depth`),
+      getFloat32(`/api/samples/${token}/depthcloud.bin`),
+      getFloat32(`/api/samples/${token}/depthlidar.bin`),
+    ])
+    return { detail, cloud, lidar }
+  },
+  sceneDepth: (token: string) => getJson<SceneDepthSummary>(`/api/scenes/${token}/depth`),
+  depthImageUrl: (sdToken: string, width?: number) =>
+    width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,
 }

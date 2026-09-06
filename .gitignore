@@ -1,7 +1,10 @@
 .DS_Store
 *.tar
+*.pth
 nuscenes/data/
 backend/.venv/
 __pycache__/
 frontend/node_modules/
 frontend/dist/
+nuscenes/cache/
+models/

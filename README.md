@@ -28,7 +28,45 @@ research context.
   keys step.
 
 The URL hash tracks the view, so `#scene-1094/20/CAM_FRONT` opens scene 1094 at
-keyframe 20 with the front camera enlarged.
+keyframe 20 with the front camera enlarged, and `#depth/scene-1094/20` opens the
+same keyframe in the depth view.
+
+## Depth Anything view
+
+![Depth view, night scene, top-down by camera](docs/depth-view.jpg)
+
+The second view runs stock Depth Anything V2 (ViT-B, no fine tuning) on all
+six cameras and puts the result next to the lidar. It is the baseline for
+both project directions in `depth-anything-av-application.md`.
+
+- **Camera tiles.** A wipe between photo and depth map, the depth map alone,
+  or the lidar points drawn on the photo and colored by how far the model
+  misses them: coral too close, blue too far.
+- **3D view.** The six depth maps unprojected into the ego frame as one
+  colored point cloud, over the lidar sweep. Color it by source camera and
+  look from the top to see where neighbouring cameras disagree about scale.
+- **Inspector.** AbsRel, RMSE, and δ1 against lidar for the keyframe and per
+  camera, plus the whole-scene average.
+- **Timeline and scene cards.** In this view the timeline bars show error per
+  keyframe and every scene card shows its average error, so day and night
+  scenes can be compared at a glance.
+
+![Lidar error overlay](docs/depth-error-tiles.jpg)
+
+The model outputs relative inverse depth, so before any comparison each image
+gets its own scale and shift fitted by least squares to the lidar points that
+project into it. Everything reported is measured after that fit. That is the
+best case for the stock model, and the spread of fitted scales between cameras
+of the same keyframe is one of the things a real system would have to resolve.
+
+On the mini split the stock model lands at 9 to 16 percent AbsRel on the
+daytime scenes and 20 to 22 percent on the three night scenes.
+
+Setup: put the checkpoint at `models/depth-anything-v2/depth_anything_v2_vitb.pth`
+(from the Depth Anything V2 release on Hugging Face), or point
+`DEPTH_ANYTHING_CHECKPOINT` at it. Predictions are computed on first request
+and cached under `nuscenes/cache/depth`. `make depth-cache` fills the cache for
+the whole split in advance, about eight minutes on an Apple GPU.
 
 ## Setup
 
@@ -86,9 +124,16 @@ timestamp, so the frontend never has to compose transforms:
 `backend/app/main.py` exposes this as JSON and binary endpoints under `/api`,
 resizes camera images on request, and serves `frontend/dist` when it exists.
 
-`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The 3D
-view is Three.js with the ego frame used directly as world coordinates, z up.
-Camera overlays are drawn on a 2D canvas over each image.
+`backend/app/depth.py` wraps the vendored Depth Anything V2 model code
+(`backend/app/depth_anything_v2`, Apache 2.0), runs it on the Apple GPU when
+available, caches predictions, fits each image to the lidar, and unprojects
+the fitted depth into the ego frame.
+
+`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The two
+views share the Three.js scaffolding in `composables/useThreeScene.ts`, with
+the ego frame used directly as world coordinates, z up. Only one view is
+mounted at a time so its WebGL context is released before the other one
+starts. Camera overlays are drawn on a 2D canvas over each image.
 
 ## What the mini split contains
 

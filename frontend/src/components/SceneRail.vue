@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { api } from '../api'
 import { formatLocation } from '../geometry'
-import { loadScene, state } from '../state'
+import { depthScenes, loadScene, state } from '../state'
 </script>
 
 <template>
@@ -29,6 +29,13 @@ import { loadScene, state } from '../state'
               <span>{{ s.nbr_samples }} keyframes</span>
               <span>{{ s.duration_s.toFixed(0) }} s</span>
               <span>{{ s.nbr_instances }} objects</span>
+            </div>
+            <div class="depth num" v-if="state.view === 'depth'">
+              <template v-if="depthScenes[s.token]">
+                <span class="bar"><i :style="{ width: Math.min(100, depthScenes[s.token].abs_rel * 300) + '%' }"></i></span>
+                <span>AbsRel {{ (depthScenes[s.token].abs_rel * 100).toFixed(1) }}%</span>
+              </template>
+              <span v-else class="muted">Measuring</span>
             </div>
           </div>
         </button>
@@ -116,5 +123,25 @@ import { loadScene, state } from '../state'
   display: flex;
   gap: 12px;
   font-size: 11.5px;
+}
+.depth {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.depth .bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.depth .bar i {
+  display: block;
+  height: 100%;
+  background: var(--radar);
+  border-radius: 2px;
 }
 </style>

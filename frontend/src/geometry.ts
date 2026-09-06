@@ -158,3 +158,22 @@ export function coverTransform(W: number, H: number, w: number, h: number) {
 export function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
 }
+
+/** One tint per camera in backend CAMERA_CHANNELS order, for the depth view. */
+export const CAMERA_TINTS = ['#FFB347', '#FF7A6B', '#E8D25A', '#5FD3C4', '#43B8E8', '#C8A6FF']
+
+/** Diverging color for log(predicted / lidar depth): coral when the model
+ *  puts a point too close, blue when too far, near white when it agrees. */
+export function errorColor(logRatio: number): string {
+  const t = Math.max(-1, Math.min(1, logRatio / 0.5))
+  const a = t < 0 ? [255, 122, 107] : [67, 184, 232]
+  const m = Math.abs(t)
+  const w = [235, 238, 242]
+  return `rgb(${(w[0] + (a[0] - w[0]) * m) | 0},${(w[1] + (a[1] - w[1]) * m) | 0},${(w[2] + (a[2] - w[2]) * m) | 0})`
+}
+
+/** 'CAM_FRONT_LEFT' -> 'Front left', 'RADAR_BACK_RIGHT' -> 'Back right'. */
+export function channelLabel(channel: string): string {
+  const words = channel.replace(/^(CAM|RADAR|LIDAR)_/, '').toLowerCase().split('_')
+  return words.map((w, i) => (i === 0 ? w[0].toUpperCase() + w.slice(1) : w)).join(' ')
+}

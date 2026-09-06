@@ -3,7 +3,7 @@
 # Demo: `make demo` builds the UI and serves everything from one process
 # at http://localhost:8000.
 
-.PHONY: setup backend frontend build demo check
+.PHONY: setup backend frontend build demo check depth-cache
 
 setup:
 	cd backend && uv sync
@@ -23,3 +23,6 @@ demo: build
 
 check:
 	cd frontend && npx vue-tsc --noEmit
+
+depth-cache:
+	cd backend && uv run python -m app.precompute_depth

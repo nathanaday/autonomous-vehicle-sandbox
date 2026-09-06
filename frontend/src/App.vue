@@ -5,6 +5,9 @@ import SceneHeader from './components/SceneHeader.vue'
 import CameraGrid from './components/CameraGrid.vue'
 import PointCloudView from './components/PointCloudView.vue'
 import Inspector from './components/Inspector.vue'
+import DepthGrid from './components/DepthGrid.vue'
+import DepthCloudView from './components/DepthCloudView.vue'
+import DepthInspector from './components/DepthInspector.vue'
 import Timeline from './components/Timeline.vue'
 import CameraLightbox from './components/CameraLightbox.vue'
 import { loadScenes, state, stepFrame } from './state'
@@ -31,16 +34,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     <SceneRail class="rail" />
     <main class="main">
       <SceneHeader />
-      <div class="stage">
+      <!-- Only one view is mounted at a time so its WebGL context and
+           textures are released before the other one allocates its own. -->
+      <div class="stage" v-if="state.view === 'explore'">
         <div class="views">
           <CameraGrid class="cameras" />
           <PointCloudView class="cloud" />
         </div>
         <Inspector class="inspector" />
       </div>
+      <div class="stage" v-else>
+        <div class="views">
+          <DepthGrid class="cameras" />
+          <DepthCloudView class="cloud" />
+        </div>
+        <DepthInspector class="inspector" />
+      </div>
       <Timeline />
     </main>
-    <CameraLightbox v-if="state.lightboxCamera" />
+    <CameraLightbox v-if="state.lightboxCamera && state.view === 'explore'" />
     <div v-if="state.error" class="error">{{ state.error }}</div>
   </div>
 </template>
