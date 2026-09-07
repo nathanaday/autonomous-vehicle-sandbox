@@ -47,7 +47,7 @@ def fuse(nusc: NuScenes, depth: DepthCache, scene_token: str, source: str, voxel
     samples = nusc.samples_of_scene[scene_token]
     first = nusc.frame(samples[0]["token"])
     global_to_scene = np.linalg.inv(first.ref_to_global)
-    moving = moving_instances(nusc, scene_token) if mask_moving else set()
+    moving = nusc.moving_instances(scene_token, MOVING_THRESHOLD_M) if mask_moving else set()
 
     volume = o3d.pipelines.integration.ScalableTSDFVolume(
         voxel_length=voxel,
@@ -129,23 +129,6 @@ def fuse(nusc: NuScenes, depth: DepthCache, scene_token: str, source: str, voxel
 
 
 # ----- pieces ---------------------------------------------------------------
-
-
-def moving_instances(nusc: NuScenes, scene_token: str) -> set[str]:
-    """Instances whose annotated position changes by more than a metre over
-    the scene. Parked cars stay; driving cars and walking people go."""
-    first: dict[str, np.ndarray] = {}
-    span: dict[str, float] = {}
-    for sample in nusc.samples_of_scene[scene_token]:
-        for ann in nusc.annotations_of_sample.get(sample["token"], []):
-            p = np.array(ann["translation"])
-            tok = ann["instance_token"]
-            if tok not in first:
-                first[tok] = p
-                span[tok] = 0.0
-            else:
-                span[tok] = max(span[tok], float(np.linalg.norm(p - first[tok])))
-    return {tok for tok, d in span.items() if d > MOVING_THRESHOLD_M}
 
 
 def moving_boxes(nusc: NuScenes, frame: Frame, moving: set[str]) -> list[tuple[np.ndarray, np.ndarray]]:

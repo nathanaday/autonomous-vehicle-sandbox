@@ -16,7 +16,7 @@ export interface SceneSummary {
   nbr_instances: number
   category_counts: Record<string, number>
   sweep_counts: Record<string, number>
-  features: { depth: boolean; fusion: boolean; splat: boolean }
+  features: { depth: boolean; fusion: boolean; splat: boolean; gs3d: boolean }
 }
 
 export interface SceneSample {
@@ -248,10 +248,44 @@ export interface SceneSplatStatus {
   message?: string
 }
 
+/** One trained splat of a whole scene (official 3DGS), with its stats and
+ *  the per-keyframe ego poses in the scene frame. */
+export interface Gs3dVariant {
+  key: string
+  label: string
+  state: 'ready'
+  scene_token: string
+  scene_name: string
+  images: 'kf' | 'sweeps'
+  mask_moving: boolean
+  depth_prior: boolean
+  method: string
+  iterations: number
+  eval_holdout: boolean
+  trainer_args: string[]
+  n_images: number
+  n_keyframe_images: number
+  n_masked_images: number
+  moving_instances: number
+  n_points_init: number
+  n_gaussians: number
+  psnr: Record<string, number>
+  gpu: string | null
+  seconds: number
+  ply_bytes: number
+  poses: FusionPose[]
+}
+
+export interface SceneGs3dStatus {
+  scene_token: string
+  variants: Gs3dVariant[]
+  message?: string
+}
+
 /** Which features have results in the cache for at least one scene. Each
  *  unlocks views; a view whose feature has nothing shows how to fetch its
  *  data bundle instead of its content. */
-export type FeatureName = 'dataset' | 'depth' | 'fusion' | 'splat'
+export type FeatureName = 'dataset' | 'depth' | 'fusion' | 'splat' | 'gs3d'
 export interface FeatureInfo {
   present: boolean
   views: string[]
@@ -308,6 +342,8 @@ export const api = {
   sceneSplat: (sceneToken: string, views: number, posed: boolean) =>
     getJson<SceneSplatStatus>(`/api/scenes/${sceneToken}/splat?views=${views}&posed=${posed}`),
   splatUrl: (key: string) => `/api/splat/${key}.ply`,
+  sceneGs3d: (sceneToken: string) => getJson<SceneGs3dStatus>(`/api/scenes/${sceneToken}/gs3d`),
+  gs3dUrl: (key: string) => `/api/gs3d/${key}.ply`,
   depthImageUrl: (sdToken: string, width?: number) =>
     width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,
 }

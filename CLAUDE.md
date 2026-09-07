@@ -50,6 +50,11 @@ the data bundles, not torch or the checkpoints.
   --scene NAME` fills the cache for a scene, skipping what exists. It imports
   the loader and the cache classes from `backend/app`, so both sides name
   files the same way. See `compute/README.md`.
+  The trained-splat task is the exception: `compute/gs3d/export.py` writes a
+  scene in COLMAP layout using the viewer's environment, and
+  `compute/gs3d/train.py` runs the official 3DGS trainer on a CUDA machine
+  (`make gs3d-push`, `gs3d-setup`, `gs3d-train`, `gs3d-pull` with
+  `GS3D_HOST`); nothing here has a CUDA build.
 - **Backend — Python, `backend/`.** FastAPI, numpy and Pillow only. Owns the
   nuScenes loading, calibration and geometry, and serves the caches. A scene
   without results answers 404 with the compute command in the detail.
@@ -84,9 +89,14 @@ summary.
   Anything 3; two DA3 quirks are worked around there and explained in its
   comments: the API's pose-based depth rescale, and the Gaussian head's
   positions.
+- `backend/app/gs3d.py` names and reads the trained splats (`data/cache/gs3d`),
+  one per scene and option set, in the scene frame like the fused meshes.
+  The key is `<scene token[:12]>_<kf|sweeps>_m<0|1>_d<0|1>`; the backend
+  lists whatever variants exist rather than a fixed option grid, since each
+  is a training run on a rented GPU.
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
-  Four views, `explore`, `depth`, `fusion` and `splat`, share
+  Five views, `explore`, `depth`, `fusion`, `splat` and `gs3d`, share
   `composables/useThreeScene.ts`; only one is mounted at a time. Splats render
   through `@sparkjsdev/spark`, which needs three >= 0.180. Views whose feature
   has no results are locked with the fetch command; a scene or setting
@@ -94,23 +104,26 @@ summary.
 - The nuScenes ego frame origin is at road level, not at axle height. Ground
   is z = 0; the lidar sweeps put it between -0.4 and 0 m.
 
-Only keyframes are exposed. Sweeps and map rasters are not wired up. No
-training code exists yet; the depth view is the stock baseline both stubs
-compare against. `todo.md` holds the wishlist.
+Only keyframes are exposed in the viewer. Sweeps are read only by the `gs3d`
+export; map rasters are not wired up. No training code for either stub
+exists yet; the 3DGS trainer reconstructs scenes, it does not train a depth
+model. The depth view is the stock baseline both stubs compare against.
+`todo.md` holds the wishlist.
 
 ## Commands
 
-Everything large lives in `data/` (gitignored). `data.manifest` lists four
+Everything large lives in `data/` (gitignored). `data.manifest` lists the
 bundles that `scripts/sync_data.sh` fetches from GitHub releases, each with
 three scenes (0061, 0103, 1094): `dataset` (`data/nuscenes`, keyframes only,
-required), `depth`, `fusion` and `splat` (`data/cache/<feature>`).
+required), `depth`, `fusion`, `splat` and `gs3d` (`data/cache/<feature>`).
+The local copy also has the 12 Hz sweeps, which only the `gs3d` export uses.
 Checkpoints go to `data/models` and are fetched by `scripts/fetch_models.sh`
 for the compute side only. `make data-bundle TAG=… BUNDLES=… SCENES=…`
 rebuilds bundles from a local `data/` through `scripts/list_files.py`.
 
 - `make setup` installs the viewer's Python deps with uv and npm deps.
 - `make data`, `make data-depth`, `make data-fusion`, `make data-splat`,
-  `make data-all` fetch the bundles.
+  `make data-gs3d`, `make data-all` fetch the bundles.
 - `make backend` and `make frontend` run the two dev servers. Open
   http://localhost:5173.
 - `make demo` builds the UI and serves everything from http://localhost:8000.
@@ -118,6 +131,10 @@ rebuilds bundles from a local `data/` through `scripts/list_files.py`.
   `make compute SCENES="scene-0061" TASK=all` fills the cache for a scene:
   about a minute for depth, four for the twelve fusion meshes, three and a
   half for the splats on an Apple GPU.
+- `make gs3d-export SCENES=…` exports a scene for the 3DGS trainer in about
+  half a minute (two and a half with `GS3D_ARGS=--sweeps`); the `gs3d-*`
+  targets with `GS3D_HOST=user@host` run it on a CUDA machine. See
+  `compute/README.md`.
 - `make check` type-checks the frontend. There are no automated tests yet.
 
 Take screenshots with puppeteer-core driving the installed Chrome when the

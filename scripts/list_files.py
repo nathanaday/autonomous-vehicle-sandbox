@@ -3,7 +3,7 @@
     uv run --project backend python scripts/list_files.py <bundle> <scene-name>...
 
 Bundles: dataset (tables plus the keyframe files of each scene, no sweeps),
-depth, fusion, splat (the cache files of each scene). scripts/bundle_data.sh
+depth, fusion, splat, gs3d (the cache files of each scene). scripts/bundle_data.sh
 feeds the list to tar.
 """
 
@@ -54,8 +54,11 @@ def main() -> None:
             for sample in nusc.samples_of_scene[scene["token"]]:
                 prefix = splat_key(sample["token"], 6, True).split("_v")[0]
                 out += [f"cache/splat/{p.name}" for p in sorted((DATA / "cache" / "splat").glob(f"{prefix}_*"))]
+    elif bundle == "gs3d":
+        for scene in scenes:
+            out += [f"cache/gs3d/{p.name}" for p in sorted((DATA / "cache" / "gs3d").glob(f"{scene['token'][:12]}_*"))]
     else:
-        raise SystemExit("bundle must be dataset, depth, fusion or splat")
+        raise SystemExit("bundle must be dataset, depth, fusion, splat or gs3d")
 
     absent = [f for f in out if not (DATA / f).exists()]
     if absent:

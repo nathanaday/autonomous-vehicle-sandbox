@@ -214,6 +214,23 @@ class NuScenes:
         sensors.sort(key=lambda s: (s["modality"], s["channel"]))
         return {**summary, "samples": samples, "sensors": sensors}
 
+    def moving_instances(self, scene_token: str, threshold_m: float = 1.0) -> set[str]:
+        """Instances whose annotated position changes by more than the
+        threshold over the scene. Parked cars stay; driving cars and walking
+        people go."""
+        first: dict[str, np.ndarray] = {}
+        span: dict[str, float] = {}
+        for sample in self.samples_of_scene[scene_token]:
+            for ann in self.annotations_of_sample.get(sample["token"], []):
+                p = np.array(ann["translation"])
+                tok = ann["instance_token"]
+                if tok not in first:
+                    first[tok] = p
+                    span[tok] = 0.0
+                else:
+                    span[tok] = max(span[tok], float(np.linalg.norm(p - first[tok])))
+        return {tok for tok, d in span.items() if d > threshold_m}
+
     # ----- frames -------------------------------------------------------
 
     def frame(self, sample_token: str) -> Frame:

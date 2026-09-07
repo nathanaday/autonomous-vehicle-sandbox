@@ -64,7 +64,7 @@ make demo  # starts the app
 > <http://localhost:8000>
 
 
-### Adding Depth, Fusion, Splat Data Views
+### Adding Depth, Fusion, Splat, Trained Splat Data Views
 
 > Downloads the pre-computed data needed for the extra views. 
 > Note: You can run any or all of these depending on what you want to see
@@ -74,6 +74,7 @@ make demo  # starts the app
 make data-depth    # Depth Anything predictions
 make data-fusion   # fused meshes
 make data-splat    # Gaussian splats
+make data-gs3d     # trained Gaussian splats
 ```
 
 Restart the demo server, and the corresponding data view tab will be unlocked.
@@ -173,7 +174,30 @@ views and 10 for twelve. The browser renders the result with
 - **Overlays.** The lidar sweep, the camera frustums, the range rings and ego
   car, all in the keyframe's ego frame.
 
+## Trained splat view
 
+The fifth view is one Gaussian splat of the whole scene, trained with the
+[official 3D Gaussian Splatting code](https://github.com/graphdeco-inria/gaussian-splatting)
+(Kerbl et al. 2023) and rendered with Spark. Where the Gaussian splat view is
+one forward pass per keyframe, this one is 30,000 iterations of optimisation
+per scene, so it needs a CUDA machine and runs offline; the viewer reads the
+result from the `gs3d` bundle.
+
+- **Input.** The dataset's poses and intrinsics replace the usual
+  structure-from-motion step. Every keyframe's lidar, static returns only and
+  coloured from the cameras, is the initial set of Gaussians. Objects that move
+  during the scene are masked out of the images, and the Depth Anything
+  prediction of each image, fitted to lidar, can serve as the trainer's depth
+  prior.
+- **Variants.** Keyframes only, or keyframes plus the 12 Hz sweeps; masked or
+  not; with or without the depth prior. Each is a separate training run, and
+  the panel lists the ones in the cache.
+- **Overlays.** The ego car and its path, and the current keyframe's lidar
+  sweep, all in the scene frame, which is the ego frame of the first keyframe.
+  Step through the keyframes to drive through the trained scene.
+
+`compute/README.md` describes the export, the setup of the GPU machine, and
+the training run.
 
 ---
 

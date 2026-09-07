@@ -17,6 +17,7 @@ them.
 | `depth` | `data/cache/depth/` | Depth Anything output for every keyframe camera image, with per-scene summaries | 0.1 GB | Depth Anything |
 | `fusion` | `data/cache/fusion/` | Fused meshes, twelve per scene | 0.7 GB | Fused mesh |
 | `splat` | `data/cache/splat/` | Gaussian splats, one per keyframe | 4.0 GB | Gaussian splat |
+| `gs3d` | `data/cache/gs3d/` | Trained Gaussian splats, one per scene and option set | 0.8 GB | Trained splat |
 
 The `dataset` bundle is required; the backend refuses to start without it.
 The tables list all ten scenes of the split, and the backend shows the ones
@@ -29,9 +30,9 @@ The bundles are split into parts under 2 GB on the repository's
 `data.manifest` at the repository root records, for each bundle, the release
 URL and a SHA-256 for every part and for the joined archive.
 
-**Option 1, the script.** `make data`, `make data-depth`, `make data-fusion`
-and `make data-splat` run `scripts/sync_data.sh` for one bundle; `make
-data-all` fetches all four. The script downloads the parts listed in
+**Option 1, the script.** `make data`, `make data-depth`, `make data-fusion`,
+`make data-splat` and `make data-gs3d` run `scripts/sync_data.sh` for one
+bundle; `make data-all` fetches all of them. The script downloads the parts listed in
 `data.manifest`, verifies each checksum, joins and verifies the archive,
 extracts it into `data/`, and checks that the bundle's marker path exists. It
 resumes interrupted downloads and skips a bundle that is already installed.
@@ -58,8 +59,9 @@ to a release with that tag, and commit the updated `data.manifest`. Bundles
 not rebuilt keep their lines and their release URL. `SCENES` chooses the
 scenes.
 
-`NUSCENES_DATAROOT`, `DEPTH_CACHE`, `FUSION_CACHE` and `SPLAT_CACHE` override
-the locations for the backend and the compute CLI alike.
+`NUSCENES_DATAROOT`, `DEPTH_CACHE`, `FUSION_CACHE`, `SPLAT_CACHE` and
+`GS3D_CACHE` override the locations for the backend and the compute CLI
+alike.
 
 
 
@@ -98,8 +100,12 @@ and `cli.py`, which fills the cache for named scenes and loads each model
 once. It imports the loader and the cache classes from `backend/app`, so both
 sides name files the same way. `backend/app/depth.py`, `fusion.py` and
 `splat.py` only read the cache; the backend's environment has no torch.
+`compute/gs3d/` is the one task that does not run here: `export.py` writes a
+scene in COLMAP layout with the viewer's environment, and `train.py` runs
+the official 3DGS trainer on a CUDA machine; `backend/app/gs3d.py` reads what
+comes back.
 
-`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The four
+`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The five
 views share the Three.js scaffolding in `composables/useThreeScene.ts`, with
 the ego frame used directly as world coordinates, z up. The nuScenes ego
 origin is on the road surface. Only one view is mounted at a time so its
@@ -206,3 +212,99 @@ about three and a half minutes on an Apple GPU, and its `--views 18` and
 `--unposed` options fill the other settings the panel offers. The Depth
 Anything 3 checkpoint is CC BY-NC 4.0; the vendored Depth Anything V2 code and
 the DA3 code installed by pip are Apache 2.0.
+
+## Trained splat view
+
+The fifth view is one Gaussian splat of a whole scene from the
+[official 3D Gaussian Splatting code](https://github.com/graphdeco-inria/gaussian-splatting)
+(Kerbl et al. 2023). The trainer's rasteriser is a CUDA extension, so the
+run happens on a rented NVIDIA machine, and the viewer reads the result from
+the `gs3d` bundle. The scene frame is the ego frame of the first keyframe,
+the same frame as the fused mesh, so the ego car, its path and the current
+keyframe's lidar sweep are drawn through the trained scene as in the fused
+mesh view.
+
+The trainer reads a COLMAP-layout folder, and `compute/gs3d/export.py`
+writes one from the dataset without a structure-from-motion run:
+
+- **Cameras.** One PINHOLE camera per channel and a world-to-camera pose per
+  image, from the calibrated sensors and the ego poses. The nuScenes camera
+  frame is already the OpenCV convention and the images are undistorted.
+- **Images.** The 2 Hz keyframes, 234 per scene, or with the 12 Hz sweeps,
+  about 1,300. Objects that move more than a metre during the scene are
+  masked out through the image's alpha channel, which the trainer takes as a
+  loss mask; for a sweep the annotation boxes are interpolated between its
+  two keyframes. The back camera's view of the car's own body is masked too.
+- **Initial points.** Every keyframe's lidar, minus returns on the ego car
+  and inside moving boxes, coloured by projecting into that keyframe's
+  cameras, down-sampled to a 15 cm grid: about 300,000 points where a
+  structure-from-motion run would give a few tens of thousands.
+- **Depth prior.** The trainer's depth regularisation, as in the authors'
+  hierarchical 3DGS paper, wants each image's inverse depth from Depth
+  Anything with a scale and shift. The export takes the prediction from the
+  depth cache and fits it to the lidar rather than to sparse points. Sweeps
+  are not in the depth cache, so a sweeps export has no prior.
+
+`compute/gs3d/train.py` runs the trainer's `train.py` for 30,000 iterations
+and files the PLY with a JSON of stats and the per-keyframe ego poses under
+`data/cache/gs3d/<scene token[:12]>_<kf|sweeps>_m<0|1>_d<0|1>`. The backend
+lists whatever variants exist for a scene, since each one is a training run
+on a rented GPU rather than a grid the compute CLI fills. The PLY is a
+standard 3DGS file that any splat viewer opens. `compute/README.md` has the
+commands, from `make gs3d-export` to `make gs3d-pull`.
+
+The trainer's code is licensed for non-commercial research use only.
+
+### Runs so far
+
+All runs used the trainer at its defaults for 30,000 iterations on a Lambda
+NVIDIA A10 (24 GB), one run at a time, through `make gs3d-train`. Setup on
+a fresh Ubuntu 22.04 image took about ten minutes, most of it building the
+three CUDA extensions. PSNR is the trainer's own figure on the training
+images at the last iteration; no images were held out.
+
+| Scene | Variant | Images | Initial points | Gaussians | PSNR (dB) | Minutes | PLY (MB) |
+|---|---|---|---|---|---|---|---|
+| scene-0061 | keyframes, depth prior | 234 | 294,806 | 897,889 | 24.2 | 40 | 223 |
+| scene-0061 | keyframes + sweeps, no prior | 1318 | 294,806 | 682,310 | 23.0 | 44 | 169 |
+| scene-0103 | keyframes, depth prior | 240 | 291,305 | 1,048,556 | 24.2 | 45 | 260 |
+| scene-1094 | keyframes, depth prior | 240 | 375,131 | 527,184 | 22.8 | 30 | 131 |
+
+What the results show, judged in the viewer's Driver preset, which places
+the camera at the windshield looking down the road:
+
+- **Geometry is right.** The static scene lines up with the real front
+  camera at every keyframe checked: lane markings, barriers, cones, parked
+  vehicles and building fronts sit where the photo has them. Vehicles that
+  drove through the scene are absent, as the masks intend. The lidar overlay
+  falls on the trained surfaces.
+- **Renders are soft.** Edges are recognisable but blurred, and the sky
+  bleeds into trees. The three keyframe runs land at the same PSNR, so this
+  is the method on this data rather than a property of one scene. A
+  keyframe run sees each surface from a handful of positions two metres
+  apart along one line, a far cry from the inward-facing capture the method
+  was designed for.
+- **Viewpoints away from the path are worse.** From the Chase, Top and
+  Side presets, tens of metres from any training image, the splat shows
+  elongated Gaussians and floaters instead of surfaces. This is expected;
+  nothing constrained those views.
+- **Adding sweeps made it worse, as run.** The scene-0061 sweeps run had
+  six times the images and came out blurrier with fewer Gaussians and a
+  lower PSNR. Two things changed at once. The export has no depth prior,
+  because Depth Anything has only been run on keyframes. And the trainer's
+  schedule is fixed in iterations, so each image was visited about 23
+  times instead of about 128, and densification, which stops at iteration
+  15,000, fired less on gradients averaged over near-duplicate views. The
+  sweeps also add little viewpoint diversity, since they lie on the same
+  path 30 cm apart.
+
+Open questions, in the order worth running them:
+
+1. Keyframes without the prior (`GS3D_TRAIN_ARGS=--no-depth`), to measure
+   what the prior contributes. Forty minutes.
+2. Sweeps with the schedule scaled to the image count, for example
+   `--iterations 90000 --densify_until_iter 45000 --position_lr_max_steps 90000`,
+   passed through `GS3D_TRAIN_ARGS`. About two hours.
+3. Sweeps with the prior, which needs Depth Anything V2 run on the sweep
+   images first. That is a change to the compute side's depth step, not to
+   the trainer.

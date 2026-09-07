@@ -3,8 +3,8 @@
 Run from `backend/` with `uv run uvicorn app.main:app --reload`.
 Serves the dataset and the caches that compute/cli.py fills; it computes
 nothing itself. Everything large lives under `../data/` (see DETAILS.md, "Data").
-Override the locations with NUSCENES_DATAROOT, DEPTH_CACHE, FUSION_CACHE and
-SPLAT_CACHE. If `../frontend/dist` exists it is served at `/`.
+Override the locations with NUSCENES_DATAROOT, DEPTH_CACHE, FUSION_CACHE,
+SPLAT_CACHE and GS3D_CACHE. If `../frontend/dist` exists it is served at `/`.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from PIL import Image
 
 from .depth import MODEL_INFO, DepthCache, NotComputed
 from .fusion import SOURCES, VOXELS, FusionCache
+from .gs3d import Gs3dCache
 from .nuscenes import NuScenes
 from .splat import SplatCache
 
@@ -32,6 +33,7 @@ FRONTEND_DIST = ROOT / "frontend" / "dist"
 DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", DATA / "cache" / "depth"))
 FUSION_CACHE = Path(os.environ.get("FUSION_CACHE", DATA / "cache" / "fusion"))
 SPLAT_CACHE = Path(os.environ.get("SPLAT_CACHE", DATA / "cache" / "splat"))
+GS3D_CACHE = Path(os.environ.get("GS3D_CACHE", DATA / "cache" / "gs3d"))
 
 if not (DATAROOT / "v1.0-mini" / "scene.json").exists():
     raise SystemExit(f"nuScenes v1.0-mini not found at {DATAROOT}. Run 'make data' first; see DETAILS.md, Data.")
@@ -40,6 +42,7 @@ nusc = NuScenes(DATAROOT)
 depth = DepthCache(DEPTH_CACHE)
 fusion = FusionCache(FUSION_CACHE)
 splats = SplatCache(SPLAT_CACHE)
+gs3d = Gs3dCache(GS3D_CACHE)
 app = FastAPI(title="nuScenes sandbox")
 
 
@@ -57,6 +60,7 @@ def _features(scene: dict) -> dict:
         "depth": depth.has_scene(scene["token"]),
         "fusion": fusion.has_scene(scene["token"]),
         "splat": splats.has_scene(tokens),
+        "gs3d": gs3d.has_scene(scene["token"]),
     }
 
 
@@ -81,6 +85,7 @@ def features():
         "depth": {"present": any(f["depth"] for f in per_scene), "views": ["depth"], "make": "make data-depth"},
         "fusion": {"present": any(f["fusion"] for f in per_scene), "views": ["fusion"], "make": "make data-fusion"},
         "splat": {"present": any(f["splat"] for f in per_scene), "views": ["splat"], "make": "make data-splat"},
+        "gs3d": {"present": any(f["gs3d"] for f in per_scene), "views": ["gs3d"], "make": "make data-gs3d"},
     }
 
 
@@ -312,6 +317,34 @@ def splat_ply(key: str):
     path = splats.ply_path(key)
     if "/" in key or ".." in key or not path.exists():
         raise HTTPException(404, "no splat with that key")
+    return FileResponse(path, media_type="application/octet-stream",
+                        headers={"Cache-Control": "max-age=86400"})
+
+
+# ----- trained Gaussian splats (official 3DGS) ----------------------------
+
+
+@app.get("/api/scenes/{scene_token}/gs3d")
+def scene_gs3d(scene_token: str):
+    """Every trained splat of the scene with its stats and the per-keyframe
+    ego poses in the scene frame; fetch /api/gs3d/{key}.ply for one. With
+    none, a message saying how they are made."""
+    scene = _get("scene", scene_token)
+    variants = gs3d.variants(scene_token)
+    out = {"scene_token": scene_token, "variants": variants}
+    if not variants:
+        out["message"] = (f"{scene['name']} has no trained splat yet. Export it, train on a CUDA machine, "
+                          f"and pull the result: make gs3d-export SCENES={scene['name']}; see compute/README.md.")
+    return out
+
+
+@app.get("/api/gs3d/{key}.ply")
+def gs3d_ply(key: str):
+    """3DGS-format PLY in the scene frame, which is the ego frame of the
+    scene's first keyframe."""
+    path = gs3d.ply_path(key)
+    if "/" in key or ".." in key or not path.exists():
+        raise HTTPException(404, "no trained splat with that key")
     return FileResponse(path, media_type="application/octet-stream",
                         headers={"Cache-Control": "max-age=86400"})
 

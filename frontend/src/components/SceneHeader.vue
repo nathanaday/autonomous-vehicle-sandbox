@@ -15,6 +15,7 @@ const views: { id: ViewMode; label: string; hint: string }[] = [
   { id: 'depth', label: 'Depth Anything', hint: 'Stock monocular depth against the lidar' },
   { id: 'fusion', label: 'Fused mesh', hint: 'The whole scene fused into one surface' },
   { id: 'splat', label: 'Gaussian splat', hint: 'Depth Anything 3 splat of one keyframe, no training' },
+  { id: 'gs3d', label: 'Trained splat', hint: 'The whole scene as one Gaussian splat, trained with the official 3DGS code' },
 ]
 
 function setView(v: ViewMode) {

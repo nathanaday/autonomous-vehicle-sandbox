@@ -1,9 +1,9 @@
-import { reactive, shallowRef, watch } from 'vue'
-import { api, type DepthFrame, type FeatureInfo, type FeatureName, type Features, type Frame, type FusionSource, type FusionStatus, type SceneDepthSummary, type SceneDetail, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
+import { computed, reactive, shallowRef, watch } from 'vue'
+import { api, type DepthFrame, type FeatureInfo, type FeatureName, type Features, type Frame, type FusionSource, type FusionStatus, type Gs3dVariant, type SceneDepthSummary, type SceneDetail, type SceneGs3dStatus, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
-export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat'
-export const VIEW_MODES: ViewMode[] = ['explore', 'depth', 'fusion', 'splat']
+export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat' | 'gs3d'
+export const VIEW_MODES: ViewMode[] = ['explore', 'depth', 'fusion', 'splat', 'gs3d']
 export type FusionShading = 'photo' | 'lit' | 'normals'
 export type DepthTileMode = 'wipe' | 'depth' | 'error'
 export type DepthCloudColor = 'photo' | 'camera' | 'error'
@@ -38,6 +38,14 @@ export const splatLayers = reactive({
   rings: true,
 })
 
+export const gs3dLayers = reactive({
+  variant: '', // key of the trained splat to show; '' means the scene's first
+  lidar: true,
+  path: true,
+  followEgo: true,
+  rings: false,
+})
+
 export const layers = reactive({
   lidar: true,
   radar: true,
@@ -68,6 +76,7 @@ export const state = reactive({
   loadingDepth: false,
   depthError: null as string | null,
   loadingSplat: false,
+  loadingGs3d: false,
 })
 
 /** Features with results in the backend's cache; null until loaded. */
@@ -288,8 +297,37 @@ export async function loadScene(token: string, index = 0) {
   }
 }
 
+/** The trained splats of the current scene, loaded only in the gs3d view. */
+export const sceneGs3d = shallowRef<SceneGs3dStatus | null>(null)
+let gs3dRequest = 0
+async function loadSceneGs3d() {
+  const scene = state.scene
+  if (!scene || state.view !== 'gs3d') return
+  const id = ++gs3dRequest
+  try {
+    const s = await api.sceneGs3d(scene.token)
+    if (id === gs3dRequest) sceneGs3d.value = s
+  } catch (e) {
+    if (id === gs3dRequest) sceneGs3d.value = { scene_token: scene.token, variants: [], message: String(e) }
+  }
+}
+watch(
+  () => [state.view, state.scene?.token] as const,
+  ([view]) => {
+    sceneGs3d.value = null
+    if (view === 'gs3d') loadSceneGs3d()
+  },
+  { immediate: true },
+)
+
+/** The trained splat on show: the chosen variant when the scene has it, else the first one. */
+export const gs3dVariant = computed<Gs3dVariant | null>(() => {
+  const variants = sceneGs3d.value?.variants ?? []
+  return variants.find((v) => v.key === gs3dLayers.variant) ?? variants[0] ?? null
+})
+
 /** URL hash mirrors the view: #scene-0061/12/CAM_FRONT (scene, keyframe, open
- *  camera), or #depth/…, #fusion/…, #splat/… for the other views. */
+ *  camera), or #depth/…, #fusion/…, #splat/…, #gs3d/… for the other views. */
 function readHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/')
   const view: ViewMode = (VIEW_MODES as string[]).includes(parts[0]) && parts[0] !== 'explore' ? (parts[0] as ViewMode) : 'explore'

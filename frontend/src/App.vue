@@ -12,6 +12,8 @@ import FusionView from './components/FusionView.vue'
 import FusionInspector from './components/FusionInspector.vue'
 import SplatView from './components/SplatView.vue'
 import SplatInspector from './components/SplatInspector.vue'
+import Gs3dView from './components/Gs3dView.vue'
+import Gs3dInspector from './components/Gs3dInspector.vue'
 import LockedView from './components/LockedView.vue'
 import Timeline from './components/Timeline.vue'
 import CameraLightbox from './components/CameraLightbox.vue'
@@ -62,9 +64,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         <FusionView class="cloud" />
         <FusionInspector class="inspector" />
       </div>
-      <div class="stage" v-else>
+      <div class="stage" v-else-if="state.view === 'splat'">
         <SplatView class="cloud" />
         <SplatInspector class="inspector" />
+      </div>
+      <div class="stage" v-else>
+        <Gs3dView class="cloud" />
+        <Gs3dInspector class="inspector" />
       </div>
       <Timeline />
     </main>
