@@ -176,6 +176,11 @@ views and 10 for twelve. The browser renders the result with
 
 ## Trained splat view
 
+![Trained splat view, drivers perspective](docs/trained-splat-keyframes-sweep.png)
+
+![Trained splat view, new perspective](docs/trained-splat-keyframes-sweep-surrounding.png)
+
+
 The fifth view is one Gaussian splat of the whole scene, trained with the
 [official 3D Gaussian Splatting code](https://github.com/graphdeco-inria/gaussian-splatting)
 (Kerbl et al. 2023) and rendered with Spark. Where the Gaussian splat view is
