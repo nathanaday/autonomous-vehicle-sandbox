@@ -64,7 +64,7 @@ make demo  # starts the app
 > <http://localhost:8000>
 
 
-### Adding Depth, Fusion, Splat, Trained Splat Data Views
+### Adding Depth, Fusion, Splat, Trained Splat, Occupancy Data Views
 
 > Downloads the pre-computed data needed for the extra views. 
 > Note: You can run any or all of these depending on what you want to see
@@ -75,6 +75,7 @@ make data-depth    # Depth Anything predictions
 make data-fusion   # fused meshes
 make data-splat    # Gaussian splats
 make data-gs3d     # trained Gaussian splats
+make data-occ3d    # Occ3D-nuScenes occupancy labels
 ```
 
 Restart the demo server, and the corresponding data view tab will be unlocked.
@@ -207,3 +208,31 @@ the training run.
 ---
 
 Details on the data bundles and how the pieces fit together are in [DETAILS.md](DETAILS.md).
+
+## Occupancy view
+
+![Occupancy view, Occ3D labels over the lidar sweep](docs/occupancy-view.jpg)
+
+The sixth view shows the [Occ3D-nuScenes](https://github.com/Tsinghua-MARS-Lab/Occ3D)
+semantic occupancy label of each keyframe. Occ3D is a label set built on top
+of nuScenes, not a model: a 200 x 200 x 16 grid of 0.4 m voxels in the ego
+frame, 80 m across and 6.4 m high, each voxel one of 17 classes or free, made
+by accumulating the lidar-seg point labels over the scene. It is the ground
+truth for the 3D occupancy prediction benchmark and the target a fusion
+model in this repository would train against.
+
+- **3D view.** One cube per occupied voxel, coloured by class, with the
+  lidar sweep, the annotation boxes and the grid bounds over it. A height
+  cut slices the grid to look inside, and a cube size slider opens gaps
+  between voxels.
+- **Camera tiles.** The camera-visible voxels rendered over each photo with
+  a depth test, so the class colours can be checked against the image.
+- **Visibility.** Every occupied voxel, or only those a camera or the lidar
+  can see from this keyframe. The benchmark scores the camera-visible ones.
+- **Classes.** Counts per class for the keyframe; click one to hide it, or
+  show only that class.
+- **Alignment.** The labelled road sits about 0.8 m below the lidar's road
+  returns; the inspector reports the offset and a slider lifts the grid.
+
+The labels come from the `occ3d` bundle, or from the CVPR 2023 occupancy
+challenge release for all ten mini scenes (see `DETAILS.md`).

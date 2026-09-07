@@ -1,9 +1,10 @@
 import { computed, reactive, shallowRef, watch } from 'vue'
-import { api, type DepthFrame, type FeatureInfo, type FeatureName, type Features, type Frame, type FusionSource, type FusionStatus, type Gs3dVariant, type SceneDepthSummary, type SceneDetail, type SceneGs3dStatus, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
+import { api, type DepthFrame, type FeatureInfo, type FeatureName, type Features, type Frame, type FusionSource, type FusionStatus, type Gs3dVariant, type Occ3dFrame, type SceneDepthSummary, type SceneDetail, type SceneGs3dStatus, type SceneOcc3dStatus, type SceneSplatStatus, type SceneSummary, type SplatStatus } from './api'
 
 export type LidarColorMode = 'height' | 'intensity' | 'distance'
-export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat' | 'gs3d'
-export const VIEW_MODES: ViewMode[] = ['explore', 'depth', 'fusion', 'splat', 'gs3d']
+export type ViewMode = 'explore' | 'depth' | 'fusion' | 'splat' | 'gs3d' | 'occ3d'
+export const VIEW_MODES: ViewMode[] = ['explore', 'depth', 'fusion', 'splat', 'gs3d', 'occ3d']
+export type Occ3dVisibility = 'all' | 'camera' | 'lidar'
 export type FusionShading = 'photo' | 'lit' | 'normals'
 export type DepthTileMode = 'wipe' | 'depth' | 'error'
 export type DepthCloudColor = 'photo' | 'camera' | 'error'
@@ -46,6 +47,23 @@ export const gs3dLayers = reactive({
   rings: false,
 })
 
+export const occ3dLayers = reactive({
+  /** class ids switched off in the legend */
+  hidden: {} as Record<number, boolean>,
+  /** which voxels to draw: every occupied one, or only those a camera or the lidar observed */
+  visibility: 'all' as Occ3dVisibility,
+  /** draw voxel layers below this z index only; 16 shows the full height */
+  maxLayer: 16,
+  cubeScale: 0.9,
+  /** metres to raise the whole grid, to compare against the lidar by eye */
+  lift: 0,
+  lidar: true,
+  boxes: false,
+  bounds: true,
+  overlay: true,
+  overlayAlpha: 0.55,
+})
+
 export const layers = reactive({
   lidar: true,
   radar: true,
@@ -77,6 +95,8 @@ export const state = reactive({
   depthError: null as string | null,
   loadingSplat: false,
   loadingGs3d: false,
+  loadingOcc3d: false,
+  occ3dError: null as string | null,
 })
 
 /** Features with results in the backend's cache; null until loaded. */
@@ -297,6 +317,73 @@ export async function loadScene(token: string, index = 0) {
   }
 }
 
+/** Which keyframes of the current scene have an Occ3D label, with the grid
+ *  geometry and class list; loaded only in the occupancy view. */
+export const sceneOcc3d = shallowRef<SceneOcc3dStatus | null>(null)
+let sceneOcc3dRequest = 0
+async function loadSceneOcc3d() {
+  const scene = state.scene
+  if (!scene || state.view !== 'occ3d') return
+  const id = ++sceneOcc3dRequest
+  try {
+    const s = await api.sceneOcc3d(scene.token)
+    if (id === sceneOcc3dRequest) sceneOcc3d.value = s
+  } catch (e) {
+    if (id === sceneOcc3dRequest) sceneOcc3d.value = null
+  }
+}
+watch(
+  () => [state.view, state.scene?.token] as const,
+  ([view]) => {
+    sceneOcc3d.value = null
+    if (view === 'occ3d') loadSceneOcc3d()
+  },
+  { immediate: true },
+)
+
+/** The current keyframe's occupancy label, loaded only in the occupancy view. */
+export const occ3d = shallowRef<Occ3dFrame | null>(null)
+const occ3dCache = new Map<string, Promise<Occ3dFrame>>()
+
+function fetchOcc3d(token: string): Promise<Occ3dFrame> {
+  let p = occ3dCache.get(token)
+  if (!p) {
+    p = api.occ3d(token)
+    occ3dCache.set(token, p)
+    p.catch(() => occ3dCache.delete(token))
+  }
+  return p
+}
+
+let occ3dRequest = 0
+async function loadOcc3d(token: string, next: string | null) {
+  const id = ++occ3dRequest
+  state.loadingOcc3d = true
+  try {
+    const o = await fetchOcc3d(token)
+    if (id !== occ3dRequest) return
+    occ3d.value = o
+    state.occ3dError = null
+    if (next) fetchOcc3d(next)
+  } catch (e) {
+    if (id === occ3dRequest) {
+      occ3d.value = null
+      state.occ3dError = String(e)
+    }
+  } finally {
+    if (id === occ3dRequest) state.loadingOcc3d = false
+  }
+}
+
+watch(
+  () => [state.view, frame.value] as const,
+  ([view, f]) => {
+    if (view !== 'occ3d' || !f) return
+    if (occ3d.value?.stats.token !== f.detail.token) loadOcc3d(f.detail.token, f.detail.next)
+  },
+  { immediate: true },
+)
+
 /** The trained splats of the current scene, loaded only in the gs3d view. */
 export const sceneGs3d = shallowRef<SceneGs3dStatus | null>(null)
 let gs3dRequest = 0
@@ -388,7 +475,7 @@ watch(
         goToIndex(0)
         return
       }
-      const busy = state.loadingFrame || (state.view === 'splat' && state.loadingSplat)
+      const busy = state.loadingFrame || (state.view === 'splat' && state.loadingSplat) || (state.view === 'occ3d' && state.loadingOcc3d)
       if (!busy) loadFrame(f.detail.next)
     }, 1000 / fps)
   },

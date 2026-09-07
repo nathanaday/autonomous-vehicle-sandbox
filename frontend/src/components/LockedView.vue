@@ -8,6 +8,7 @@ const names: Record<string, string> = {
   fusion: 'fused meshes of each scene from camera depth and from lidar',
   splat: 'Depth Anything 3 Gaussian splats of every keyframe',
   gs3d: 'Gaussian splats of whole scenes trained with the official 3DGS code',
+  occ3d: 'Occ3D semantic occupancy labels for any keyframe',
 }
 </script>
 

@@ -14,6 +14,9 @@ import SplatView from './components/SplatView.vue'
 import SplatInspector from './components/SplatInspector.vue'
 import Gs3dView from './components/Gs3dView.vue'
 import Gs3dInspector from './components/Gs3dInspector.vue'
+import Occ3dGrid from './components/Occ3dGrid.vue'
+import Occ3dView from './components/Occ3dView.vue'
+import Occ3dInspector from './components/Occ3dInspector.vue'
 import LockedView from './components/LockedView.vue'
 import Timeline from './components/Timeline.vue'
 import CameraLightbox from './components/CameraLightbox.vue'
@@ -68,9 +71,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         <SplatView class="cloud" />
         <SplatInspector class="inspector" />
       </div>
-      <div class="stage" v-else>
+      <div class="stage" v-else-if="state.view === 'gs3d'">
         <Gs3dView class="cloud" />
         <Gs3dInspector class="inspector" />
+      </div>
+      <div class="stage" v-else>
+        <div class="views">
+          <Occ3dGrid class="cameras" />
+          <Occ3dView class="cloud" />
+        </div>
+        <Occ3dInspector class="inspector" />
       </div>
       <Timeline />
     </main>

@@ -16,7 +16,7 @@ export interface SceneSummary {
   nbr_instances: number
   category_counts: Record<string, number>
   sweep_counts: Record<string, number>
-  features: { depth: boolean; fusion: boolean; splat: boolean; gs3d: boolean }
+  features: { depth: boolean; fusion: boolean; splat: boolean; gs3d: boolean; occ3d: boolean }
 }
 
 export interface SceneSample {
@@ -285,13 +285,64 @@ export interface SceneGs3dStatus {
 /** Which features have results in the cache for at least one scene. Each
  *  unlocks views; a view whose feature has nothing shows how to fetch its
  *  data bundle instead of its content. */
-export type FeatureName = 'dataset' | 'depth' | 'fusion' | 'splat' | 'gs3d'
+export type FeatureName = 'dataset' | 'depth' | 'fusion' | 'splat' | 'gs3d' | 'occ3d'
 export interface FeatureInfo {
   present: boolean
   views: string[]
   make: string
 }
 export type Features = Record<FeatureName, FeatureInfo>
+
+/** Occ3D-nuScenes semantic occupancy labels: a 200 x 200 x 16 grid of 0.4 m
+ *  voxels in the ego frame, one class per voxel, with two visibility masks. */
+export interface Occ3dClass {
+  id: number
+  name: string
+  color: string
+}
+
+export interface Occ3dGridSpec {
+  shape: number[]
+  voxel: number
+  origin: number[]
+}
+
+export interface SceneOcc3dStatus {
+  scene_name: string
+  keyframes: { token: string; ready: boolean; n_occupied: number }[]
+  n_ready: number
+  n_total: number
+  grid: Occ3dGridSpec
+  classes: Occ3dClass[]
+  message?: string
+}
+
+export interface Occ3dStats {
+  token: string
+  n_occupied: number
+  n_free: number
+  n_lidar_visible: number
+  n_camera_visible: number
+  n_occupied_lidar_visible: number
+  n_occupied_camera_visible: number
+  class_counts: number[]
+  class_counts_camera: number[]
+  class_counts_lidar: number[]
+  lidar: { n: number; n_in_grid: number; hit_occupied: number; hit_observed: number; ground_offset_m: number | null }
+}
+
+/** grid: one byte per voxel in x, y, z order with z fastest. Bits 0-4 hold
+ *  the class id (17 = free), bit 5 is set when the lidar saw the voxel and
+ *  bit 6 when a camera did. */
+export interface Occ3dFrame {
+  stats: Occ3dStats
+  grid: Uint8Array
+}
+
+export const OCC3D_FREE = 17
+export const OCC3D_CLASS_MASK = 31
+export const OCC3D_LIDAR_BIT = 32
+export const OCC3D_CAMERA_BIT = 64
 
 export const DEPTH_CLOUD_STRIDE = 7
 export const DEPTH_LIDAR_STRIDE = 5
@@ -309,6 +360,12 @@ async function getFloat32(url: string): Promise<Float32Array> {
   const r = await fetch(url)
   if (!r.ok) throw new Error(`${r.status} ${url}`)
   return new Float32Array(await r.arrayBuffer())
+}
+
+async function getBytes(url: string): Promise<Uint8Array> {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`${r.status} ${url}`)
+  return new Uint8Array(await r.arrayBuffer())
 }
 
 export const api = {
@@ -344,6 +401,14 @@ export const api = {
   splatUrl: (key: string) => `/api/splat/${key}.ply`,
   sceneGs3d: (sceneToken: string) => getJson<SceneGs3dStatus>(`/api/scenes/${sceneToken}/gs3d`),
   gs3dUrl: (key: string) => `/api/gs3d/${key}.ply`,
+  sceneOcc3d: (sceneToken: string) => getJson<SceneOcc3dStatus>(`/api/scenes/${sceneToken}/occ3d`),
+  async occ3d(token: string): Promise<Occ3dFrame> {
+    const [stats, grid] = await Promise.all([
+      getJson<Occ3dStats>(`/api/samples/${token}/occ3d`),
+      getBytes(`/api/samples/${token}/occ3d.bin`),
+    ])
+    return { stats, grid }
+  },
   depthImageUrl: (sdToken: string, width?: number) =>
     width ? `/api/depth/${sdToken}.png?w=${width}` : `/api/depth/${sdToken}.png`,
 }

@@ -13,18 +13,18 @@ function pick(token: string) {
  *  "computed" when it has results for all of them; the rest are raw sensor
  *  data, which is what a full v1.0-mini next to the three-scene bundles
  *  looks like. */
-type CacheFeature = 'depth' | 'fusion' | 'splat'
+type CacheFeature = 'depth' | 'fusion' | 'splat' | 'occ3d'
 const installed = computed<CacheFeature[]>(() => {
   const f = features.value
   if (!f) return []
-  return (['depth', 'fusion', 'splat'] as const).filter((name) => f[name].present)
+  return (['depth', 'fusion', 'splat', 'occ3d'] as const).filter((name) => f[name].present)
 })
 const computedScenes = computed(() => state.scenes.filter((s) => installed.value.every((name) => s.features[name])))
 const otherScenes = computed(() => state.scenes.filter((s) => !computedScenes.value.includes(s)))
 const split = computed(() => computedScenes.value.length > 0 && otherScenes.value.length > 0)
 
-const labels: Record<CacheFeature, string> = { depth: 'Depth Anything', fusion: 'fused meshes', splat: 'Gaussian splats' }
-const chips: Record<CacheFeature, string> = { depth: 'depth', fusion: 'mesh', splat: 'splat' }
+const labels: Record<CacheFeature, string> = { depth: 'Depth Anything', fusion: 'fused meshes', splat: 'Gaussian splats', occ3d: 'Occ3D labels' }
+const chips: Record<CacheFeature, string> = { depth: 'depth', fusion: 'mesh', splat: 'splat', occ3d: 'occ' }
 const installedLabel = computed(() => installed.value.map((n) => labels[n]).join(', '))
 
 const moreOpen = ref(otherScenes.value.some((s) => s.token === state.scene?.token))

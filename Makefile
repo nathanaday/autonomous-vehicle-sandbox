@@ -1,12 +1,12 @@
 # Viewing: `make setup`, `make data` (the dataset bundle) plus `make data-depth`,
 # `make data-fusion`, `make data-splat`, `make data-gs3d` for the precomputed
-# results of each view, then `make backend` and `make frontend` in two
+# results of each view, `make data-occ3d` for the Occ3D labels, then `make backend` and `make frontend` in two
 # terminals (or `make demo`).
 # Computing: `make compute-setup` once, then `make compute SCENES="scene-0061"`.
 # Training splats needs a CUDA machine: `make gs3d-export`, then `make
 # gs3d-push gs3d-setup gs3d-train gs3d-pull` with GS3D_HOST=user@host.
 
-.PHONY: setup data data-depth data-fusion data-splat data-gs3d data-all data-bundle compute-setup models compute backend frontend build demo check \
+.PHONY: setup data data-depth data-fusion data-splat data-gs3d data-occ3d data-all data-bundle compute-setup models compute backend frontend build demo check \
 	gs3d-export gs3d-push gs3d-setup gs3d-train gs3d-log gs3d-pull
 
 SCENES ?= scene-0061 scene-0103 scene-1094
@@ -31,8 +31,11 @@ data-splat:
 data-gs3d:
 	scripts/sync_data.sh gs3d
 
+data-occ3d:
+	scripts/sync_data.sh occ3d
+
 data-all:
-	scripts/sync_data.sh dataset depth fusion splat gs3d
+	scripts/sync_data.sh dataset depth fusion splat gs3d occ3d
 
 # Pack data/ for a release: make data-bundle TAG=data-v3 BUNDLES="depth splat"
 data-bundle:

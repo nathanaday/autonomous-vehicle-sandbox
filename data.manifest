@@ -14,3 +14,5 @@ part splat av-sandbox-splat.tar.gz.part-ab 953bb119b09c054aeff868fde271c4a20cfbb
 part splat av-sandbox-splat.tar.gz.part-ac d0d95e0064e4199b0c46981b453a22ebc05f40464468f30df19a2282096cf7cf 24340276
 bundle gs3d av-sandbox-gs3d.tar.gz 43fae86b793c223f4eeccc8633bd3eb45fdfb075f7becdef8c8db207a978ef90 708383100 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v3
 part gs3d av-sandbox-gs3d.tar.gz.part-aa 43fae86b793c223f4eeccc8633bd3eb45fdfb075f7becdef8c8db207a978ef90 708383100
+bundle occ3d av-sandbox-occ3d.tar.gz 9bd05597cd2dfe3f1d5c5a789373f3589dd22138e41a049ff2057997c62a9761 9267406 https://github.com/nathanaday/autonomous-vehicle-sandbox/releases/download/data-v4
+part occ3d av-sandbox-occ3d.tar.gz.part-aa 9bd05597cd2dfe3f1d5c5a789373f3589dd22138e41a049ff2057997c62a9761 9267406

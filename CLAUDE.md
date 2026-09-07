@@ -94,9 +94,16 @@ summary.
   The key is `<scene token[:12]>_<kf|sweeps>_m<0|1>_d<0|1>`; the backend
   lists whatever variants exist rather than a fixed option grid, since each
   is a training run on a rented GPU.
+- `backend/app/occ3d.py` reads the Occ3D-nuScenes occupancy labels from
+  `data/occ3d/gts/<scene>/<sample token>/labels.npz`, a download rather
+  than a computation (the `occ3d` bundle, or the CVPR 2023 challenge's mini
+  release). Grid 200x200x16 at 0.4 m in the ego frame, 18 classes with 17
+  free, two visibility masks. The x and y axes match the ego frame; the
+  labelled road is about 0.8 m below the lidar's road returns, which the
+  view reports and lets the user lift by hand rather than correcting.
 - `frontend/src` is Vue 3 + Three.js. `state.ts` holds the store and the URL
   hash sync. `overlay.ts` draws projected points and boxes onto camera images.
-  Five views, `explore`, `depth`, `fusion`, `splat` and `gs3d`, share
+  Six views, `explore`, `depth`, `fusion`, `splat`, `gs3d` and `occ3d`, share
   `composables/useThreeScene.ts`; only one is mounted at a time. Splats render
   through `@sparkjsdev/spark`, which needs three >= 0.180. Views whose feature
   has no results are locked with the fetch command; a scene or setting
@@ -115,7 +122,8 @@ model. The depth view is the stock baseline both stubs compare against.
 Everything large lives in `data/` (gitignored). `data.manifest` lists the
 bundles that `scripts/sync_data.sh` fetches from GitHub releases, each with
 three scenes (0061, 0103, 1094): `dataset` (`data/nuscenes`, keyframes only,
-required), `depth`, `fusion`, `splat` and `gs3d` (`data/cache/<feature>`).
+required), `depth`, `fusion`, `splat` and `gs3d` (`data/cache/<feature>`),
+and `occ3d` (`data/occ3d`, the Occ3D labels).
 The local copy also has the 12 Hz sweeps, which only the `gs3d` export uses.
 Checkpoints go to `data/models` and are fetched by `scripts/fetch_models.sh`
 for the compute side only. `make data-bundle TAG=… BUNDLES=… SCENES=…`
@@ -123,7 +131,7 @@ rebuilds bundles from a local `data/` through `scripts/list_files.py`.
 
 - `make setup` installs the viewer's Python deps with uv and npm deps.
 - `make data`, `make data-depth`, `make data-fusion`, `make data-splat`,
-  `make data-gs3d`, `make data-all` fetch the bundles.
+  `make data-gs3d`, `make data-occ3d`, `make data-all` fetch the bundles.
 - `make backend` and `make frontend` run the two dev servers. Open
   http://localhost:5173.
 - `make demo` builds the UI and serves everything from http://localhost:8000.

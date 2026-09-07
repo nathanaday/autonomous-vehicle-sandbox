@@ -4,12 +4,13 @@
 # bundle already on disk is left alone.
 #
 #   scripts/sync_data.sh                      # the dataset bundle, required
-#   scripts/sync_data.sh depth fusion splat gs3d   # the optional bundles, one per feature
+#   scripts/sync_data.sh depth fusion splat gs3d occ3d   # the optional bundles, one per feature
 #   KEEP_PARTS=1 scripts/sync_data.sh         # keep the downloaded parts afterwards
 #
 # Bundles, from data.manifest: dataset (nuScenes v1.0-mini, three scenes,
 # keyframes only), depth, fusion, splat and gs3d (the precomputed results of
-# each feature for those scenes). Needs curl and shasum (macOS) or sha256sum
+# each feature for those scenes), and occ3d (the Occ3D-nuScenes occupancy
+# labels of those scenes). Needs curl and shasum (macOS) or sha256sum
 # (Linux), and free disk of about twice a bundle's size while it extracts.
 set -euo pipefail
 
@@ -32,7 +33,8 @@ marker() {
     fusion) echo "cache/fusion" ;;
     splat) echo "cache/splat" ;;
     gs3d) echo "cache/gs3d" ;;
-    *) echo "unknown bundle '$1'; choose from dataset, depth, fusion, splat, gs3d" >&2; exit 1 ;;
+    occ3d) echo "occ3d/gts" ;;
+    *) echo "unknown bundle '$1'; choose from dataset, depth, fusion, splat, gs3d, occ3d" >&2; exit 1 ;;
   esac
 }
 

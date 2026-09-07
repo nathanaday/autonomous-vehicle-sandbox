@@ -4,7 +4,7 @@ Run from `backend/` with `uv run uvicorn app.main:app --reload`.
 Serves the dataset and the caches that compute/cli.py fills; it computes
 nothing itself. Everything large lives under `../data/` (see DETAILS.md, "Data").
 Override the locations with NUSCENES_DATAROOT, DEPTH_CACHE, FUSION_CACHE,
-SPLAT_CACHE and GS3D_CACHE. If `../frontend/dist` exists it is served at `/`.
+SPLAT_CACHE, GS3D_CACHE and OCC3D_ROOT. If `../frontend/dist` exists it is served at `/`.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from .depth import MODEL_INFO, DepthCache, NotComputed
 from .fusion import SOURCES, VOXELS, FusionCache
 from .gs3d import Gs3dCache
 from .nuscenes import NuScenes
+from .occ3d import Occ3dLabels
 from .splat import SplatCache
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +35,7 @@ DEPTH_CACHE = Path(os.environ.get("DEPTH_CACHE", DATA / "cache" / "depth"))
 FUSION_CACHE = Path(os.environ.get("FUSION_CACHE", DATA / "cache" / "fusion"))
 SPLAT_CACHE = Path(os.environ.get("SPLAT_CACHE", DATA / "cache" / "splat"))
 GS3D_CACHE = Path(os.environ.get("GS3D_CACHE", DATA / "cache" / "gs3d"))
+OCC3D_ROOT = Path(os.environ.get("OCC3D_ROOT", DATA / "occ3d"))
 
 if not (DATAROOT / "v1.0-mini" / "scene.json").exists():
     raise SystemExit(f"nuScenes v1.0-mini not found at {DATAROOT}. Run 'make data' first; see DETAILS.md, Data.")
@@ -43,6 +45,7 @@ depth = DepthCache(DEPTH_CACHE)
 fusion = FusionCache(FUSION_CACHE)
 splats = SplatCache(SPLAT_CACHE)
 gs3d = Gs3dCache(GS3D_CACHE)
+occ3d = Occ3dLabels(OCC3D_ROOT)
 app = FastAPI(title="nuScenes sandbox")
 
 
@@ -61,6 +64,7 @@ def _features(scene: dict) -> dict:
         "fusion": fusion.has_scene(scene["token"]),
         "splat": splats.has_scene(tokens),
         "gs3d": gs3d.has_scene(scene["token"]),
+        "occ3d": occ3d.has_scene(scene["name"], tokens),
     }
 
 
@@ -86,6 +90,7 @@ def features():
         "fusion": {"present": any(f["fusion"] for f in per_scene), "views": ["fusion"], "make": "make data-fusion"},
         "splat": {"present": any(f["splat"] for f in per_scene), "views": ["splat"], "make": "make data-splat"},
         "gs3d": {"present": any(f["gs3d"] for f in per_scene), "views": ["gs3d"], "make": "make data-gs3d"},
+        "occ3d": {"present": any(f["occ3d"] for f in per_scene), "views": ["occ3d"], "make": "make data-occ3d"},
     }
 
 
@@ -347,6 +352,51 @@ def gs3d_ply(key: str):
         raise HTTPException(404, "no trained splat with that key")
     return FileResponse(path, media_type="application/octet-stream",
                         headers={"Cache-Control": "max-age=86400"})
+
+
+# ----- Occ3D semantic occupancy labels -----------------------------------
+
+
+def _occ3d_missing(scene: dict) -> HTTPException:
+    return HTTPException(404, f"{scene['name']} has no Occ3D labels. They are a download, not a computation: "
+                              f"make data-occ3d fetches the labels of the bundled scenes; see DETAILS.md, Data.")
+
+
+@app.get("/api/scenes/{scene_token}/occ3d")
+def scene_occ3d(scene_token: str):
+    """Which keyframes of the scene have an occupancy label, the grid
+    geometry and the class list."""
+    scene = _get("scene", scene_token)
+    tokens = [s["token"] for s in nusc.samples_of_scene[scene_token]]
+    status = occ3d.scene_status(scene["name"], tokens)
+    if status["n_ready"] == 0:
+        status["message"] = _occ3d_missing(scene).detail
+    return status
+
+
+@app.get("/api/samples/{sample_token}/occ3d")
+def sample_occ3d(sample_token: str):
+    """Class counts and visibility totals of the keyframe's label, and how
+    the lidar sweep lands in the grid."""
+    sample = _get("sample", sample_token)
+    scene = nusc.get("scene", sample["scene_token"])
+    if not occ3d.path(scene["name"], sample_token).exists():
+        raise _occ3d_missing(scene)
+    lidar = nusc.read_lidar(nusc.frame(sample_token))
+    return occ3d.stats(scene["name"], sample_token, lidar)
+
+
+@app.get("/api/samples/{sample_token}/occ3d.bin")
+def sample_occ3d_grid(sample_token: str):
+    """200 x 200 x 16 bytes in x, y, z order (z fastest), ego frame. Bits
+    0-4 hold the class id, 17 for free; bit 5 is set when the lidar saw the
+    voxel, bit 6 when a camera did."""
+    sample = _get("sample", sample_token)
+    scene = nusc.get("scene", sample["scene_token"])
+    if not occ3d.path(scene["name"], sample_token).exists():
+        raise _occ3d_missing(scene)
+    return Response(occ3d.packed(scene["name"], sample_token), media_type="application/octet-stream",
+                    headers={"Cache-Control": "max-age=3600"})
 
 
 if FRONTEND_DIST.exists():

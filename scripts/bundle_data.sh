@@ -2,7 +2,7 @@
 # Pack data/ into split .tar.gz bundles for a GitHub release and update
 # data.manifest.
 #
-#   scripts/bundle_data.sh <release-tag> [dataset] [depth] [fusion] [splat] [gs3d]   # default: all five
+#   scripts/bundle_data.sh <release-tag> [dataset] [depth] [fusion] [splat] [gs3d] [occ3d]   # default: all six
 #   SCENES="scene-0061 scene-0103" scripts/bundle_data.sh data-v3 splat
 #
 # Bundles hold only the listed scenes (default: the three in SCENES below):
@@ -11,6 +11,7 @@
 #   fusion   fused meshes
 #   splat    Gaussian splats
 #   gs3d     trained Gaussian splats
+#   occ3d    Occ3D-nuScenes occupancy labels
 # scripts/list_files.py chooses the files. Each bundle's parts stay under
 # GitHub's 2 GB per-file limit and go to data/bundle/<name>/. The manifest
 # keeps its lines for bundles not rebuilt, with the release URL they were
@@ -21,7 +22,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="${1:-}"
-[ -n "$TAG" ] || { echo "usage: scripts/bundle_data.sh <release-tag> [dataset] [depth] [fusion] [splat] [gs3d]" >&2; exit 1; }
+[ -n "$TAG" ] || { echo "usage: scripts/bundle_data.sh <release-tag> [dataset] [depth] [fusion] [splat] [gs3d] [occ3d]" >&2; exit 1; }
 shift
 SCENES="${SCENES:-scene-0061 scene-0103 scene-1094}"
 REPO_URL="https://github.com/nathanaday/autonomous-vehicle-sandbox"
@@ -34,9 +35,9 @@ sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 size() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1"; }
 
 bundles=("$@")
-[ ${#bundles[@]} -gt 0 ] || bundles=(dataset depth fusion splat gs3d)
+[ ${#bundles[@]} -gt 0 ] || bundles=(dataset depth fusion splat gs3d occ3d)
 for b in "${bundles[@]}"; do
-  case "$b" in dataset|depth|fusion|splat|gs3d) ;; *) echo "unknown bundle '$b'" >&2; exit 1 ;; esac
+  case "$b" in dataset|depth|fusion|splat|gs3d|occ3d) ;; *) echo "unknown bundle '$b'" >&2; exit 1 ;; esac
 done
 
 cd "$ROOT/data"
@@ -70,7 +71,7 @@ fi
   echo "# Regenerate a bundle with scripts/bundle_data.sh <tag> <bundle>."
   echo "# bundle <name> <archive> <sha256> <bytes> <release url>"
   echo "# part <name> <file> <sha256> <bytes>"
-  for b in dataset depth fusion splat gs3d; do
+  for b in dataset depth fusion splat gs3d occ3d; do
     awk -v b="$b" '$2 == b' "$kept" "$new_lines"
   done
 } > "$MANIFEST"

@@ -18,6 +18,7 @@ them.
 | `fusion` | `data/cache/fusion/` | Fused meshes, twelve per scene | 0.7 GB | Fused mesh |
 | `splat` | `data/cache/splat/` | Gaussian splats, one per keyframe | 4.0 GB | Gaussian splat |
 | `gs3d` | `data/cache/gs3d/` | Trained Gaussian splats, one per scene and option set | 0.8 GB | Trained splat |
+| `occ3d` | `data/occ3d/` | Occ3D-nuScenes occupancy labels, one per keyframe | 9 MB | Occupancy |
 
 The `dataset` bundle is required; the backend refuses to start without it.
 The tables list all ten scenes of the split, and the backend shows the ones
@@ -31,8 +32,8 @@ The bundles are split into parts under 2 GB on the repository's
 URL and a SHA-256 for every part and for the joined archive.
 
 **Option 1, the script.** `make data`, `make data-depth`, `make data-fusion`,
-`make data-splat` and `make data-gs3d` run `scripts/sync_data.sh` for one
-bundle; `make data-all` fetches all of them. The script downloads the parts listed in
+`make data-splat`, `make data-gs3d` and `make data-occ3d` run
+`scripts/sync_data.sh` for one bundle; `make data-all` fetches all of them. The script downloads the parts listed in
 `data.manifest`, verifies each checksum, joins and verifies the archive,
 extracts it into `data/`, and checks that the bundle's marker path exists. It
 resumes interrupted downloads and skips a bundle that is already installed.
@@ -59,9 +60,18 @@ to a release with that tag, and commit the updated `data.manifest`. Bundles
 not rebuilt keep their lines and their release URL. `SCENES` chooses the
 scenes.
 
-`NUSCENES_DATAROOT`, `DEPTH_CACHE`, `FUSION_CACHE`, `SPLAT_CACHE` and
-`GS3D_CACHE` override the locations for the backend and the compute CLI
-alike.
+`NUSCENES_DATAROOT`, `DEPTH_CACHE`, `FUSION_CACHE`, `SPLAT_CACHE`,
+`GS3D_CACHE` and `OCC3D_ROOT` override the locations for the backend and the
+compute CLI alike.
+
+**Occ3D labels for every mini scene.** The `occ3d` bundle holds the three
+bundled scenes. The full mini release, all ten scenes in 26 MB, is the
+`mini` subset on the
+[CVPR 2023 occupancy challenge page](https://github.com/CVPR2023-3D-Occupancy-Prediction/CVPR2023-3D-Occupancy-Prediction)
+(Google Drive or Baidu). Extract its `gts.tar.gz` so that
+`data/occ3d/gts/<scene name>/<sample token>/labels.npz` exists; the
+`imgs.tar.gz` in the same folder duplicates the nuScenes camera images and
+is not needed.
 
 
 
@@ -105,7 +115,11 @@ scene in COLMAP layout with the viewer's environment, and `train.py` runs
 the official 3DGS trainer on a CUDA machine; `backend/app/gs3d.py` reads what
 comes back.
 
-`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The five
+`backend/app/occ3d.py` reads the Occ3D-nuScenes labels under `data/occ3d`
+and packs each keyframe's grid into one byte per voxel for the viewer, with
+per-class counts and a lidar alignment check per keyframe.
+
+`frontend/src` is Vue 3 with a small reactive store in `state.ts`. The six
 views share the Three.js scaffolding in `composables/useThreeScene.ts`, with
 the ego frame used directly as world coordinates, z up. The nuScenes ego
 origin is on the road surface. Only one view is mounted at a time so its
@@ -308,3 +322,52 @@ Open questions, in the order worth running them:
 3. Sweeps with the prior, which needs Depth Anything V2 run on the sweep
    images first. That is a change to the compute side's depth step, not to
    the trainer.
+
+## Occupancy view
+
+The sixth view shows the [Occ3D-nuScenes](https://github.com/Tsinghua-MARS-Lab/Occ3D)
+label of each keyframe (Tian et al., NeurIPS 2023). Occ3D adds a dense
+semantic occupancy ground truth to nuScenes: for every keyframe, a
+200 x 200 x 16 grid of 0.4 m voxels in the ego frame, covering -40 to 40 m
+in x and y and -1 to 5.4 m in z. Classes 0 to 16 are the nuScenes-lidarseg
+evaluation classes (barrier, bicycle, bus, car, construction vehicle,
+motorcycle, pedestrian, traffic cone, trailer, truck, drivable surface,
+other flat, sidewalk, terrain, manmade, vegetation, plus others); 17 is
+free. The authors accumulated the lidar-seg point labels over each scene,
+aligning moving objects by their box tracks, gave every voxel with points
+the majority label, ray-cast the beams to mark the voxels they crossed as
+free, and left the rest unobserved. Two masks record which voxels the
+lidar and the cameras observed; the benchmark scores camera-visible voxels
+only, by mean IoU over the 17 classes.
+
+The labels are read from `data/occ3d/gts/<scene name>/<sample
+token>/labels.npz`, the layout of the challenge release, by
+`backend/app/occ3d.py`. `/api/samples/{token}/occ3d.bin` packs the grid as
+one byte per voxel in x, y, z order: bits 0 to 4 the class, bit 5 the lidar
+mask, bit 6 the camera mask. `/api/samples/{token}/occ3d` returns the class
+counts, the visibility totals, and how the keyframe's lidar sweep lands in
+the grid. `/api/scenes/{token}/occ3d` lists the keyframes with a label and
+their occupied counts, which the timeline shows as bars.
+
+The viewer draws one instanced cube per occupied voxel and rebuilds the
+mesh when the frame, the visibility filter, the hidden classes or the height
+cut change; a keyframe has 30,000 to 60,000 occupied voxels. The camera
+tiles rasterise the camera-visible voxels into a coarse depth buffer, one
+cell per 6 image pixels, each voxel as a square the size of a voxel at its
+distance, so nearer voxels occlude farther ones and the photo shows through
+one translucent layer.
+
+**Alignment.** The x and y axes of the grid match the viewer's ego frame:
+lidar points inside car boxes land in car voxels 88 percent of the time,
+and any sign flip drops the overlap with the sweep by an order of magnitude.
+The vertical axis does not match: the labelled road surface sits in the
+lowest voxel layer, about 0.8 m below the lidar's road returns, and cars
+and pedestrians extend about 0.4 m below their annotation boxes. On the
+walls and vegetation the offset cannot be measured, since they span the
+whole height. The grid is shown as published; the inspector reports the
+measured road offset per keyframe and a slider lifts the grid so the sweep
+can be lined up by eye. A model trained on these labels inherits the
+offset, so a comparison against lidar or boxes must account for it.
+
+The mini labels are 26 MB for all ten scenes. Occ3D is released under the
+same terms as nuScenes, CC BY-NC-SA 4.0.
