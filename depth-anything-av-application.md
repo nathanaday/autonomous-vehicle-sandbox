@@ -1,13 +1,29 @@
-# Depth Anything for Driving in Bad Weather — Two Project Stubs
+# NuScenes + 3D Perception Project Stubs
 
-Both stubs start from the same observation: in rain, fog, and snow, a camera-only
-depth model becomes unreliable, and there is no clean sensor to fall back on.
-Radar returns are too sparse to drive on. LiDAR scatters off the particles.
-So the useful goal is not to detect bad weather and give up on the camera.
-It is to make the camera's depth estimate hold up when the weather is bad.
+## Lessons from NuScenes data - 3D world construction
 
-Each stub trains a model, has an obvious baseline, and produces a
-before-and-after number. Neither one tries to make the picture look nicer.
+Since I have been messing around with the NuScenes data for a couple days, I am starting to learn the task of building a reliable 3D scene from the available data is quite difficult. I have tried 4 approaches to create a usable world geometry from the Lidar and vision data, and none of them are exceptional yet.
+
+Approach 1 - Using only the Lidar points alone gives a sparse representation of the scene - while it may be sufficient to avoid collisions and navigate, it is not enough for real spatial awareness and context.
+
+Approach 2 - Adding the depth anything results improves the scene construction by a substantial margin, but only for each camera perspective. Once you start to explore the scene from new perspectives, you run into sparse and missing areas, distortions, etc. Which all makes sense given the pipeline, where depth can only be inferred with respect to the camera origin.
+
+Appraoch 3 - Fusing the depth anything map geometrically (Fused mesh view) does not produce usable results.
+
+Approach 4 - Finally, I expected that using Gaussian spalting, both a basic single-shot from DA3 and a trained splat based on [the original implementation](https://github.com/graphdeco-inria/gaussian-splatting), would produce drastically better results. But since the vehicle only samples each part of a scene in passing, there are not really enough samples to construct a complete world and the results are almost worse than Approach 2. 
+
+## Open Questions
+
+- NuScenes visual data frame rate? 
+
+
+## Potential Interest Areas
+
+- Sensor fusion: multiple modalities on vehicle + satelitte
+- Single shot, realtime occupancy grid
+- Detecting anomalies in the occupancy grid from frame to frame
+
+
 
 ---
 
@@ -37,7 +53,7 @@ our own synthetic ones.
 
 ---
 
-## Stub 2 — (Sensor Fusion) Let radar correct the depth model
+## Stub 2 — (Sensor Fusion) Let sat + radar correct the depth model
 
 **Idea.** Radar sees through rain, fog, and snow, but it only returns a few
 hundred scattered points per frame with no sense of height. It cannot replace
@@ -47,6 +63,9 @@ drifted.
 Train a small model that takes the camera's dense depth map plus the sparse
 radar points and outputs a corrected depth map. The camera supplies detail and
 structure; the radar anchors the distances.
+
+Bonus: use the satellite extension to better correct the 3D occupancy scene
+> https://huggingface.co/datasets/chenchen235/Occ3D_nuScenes_SatExt
 
 **Why it works as a project.** Other groups have published on this, so we have
 real numbers to measure ourselves against rather than only our own baseline.
@@ -62,6 +81,16 @@ moving vehicles rather than fixed structures. Cleaning them up may turn into
 more work than the model itself.
 
 ---
+
+## Stub 3 - Filling in 3D Semantic Occupancy From Sparse Data
+
+> Based on:
+> https://arxiv.org/html/2403.08748v3
+
+
+
+---
+
 
 ## The original project (@KQ)
 
