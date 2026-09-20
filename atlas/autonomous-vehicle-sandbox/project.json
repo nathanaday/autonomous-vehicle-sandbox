@@ -1,5 +1,5 @@
 {
-  "schema": "claude-atlas.project.v4",
+  "schema": "atlas-obsidian.project.v4",
   "id": "76f9efde-f38e-4ef5-b3b6-309de9bf9c46",
   "name": "autonomous-vehicle-sandbox",
   "mode": "generic",
