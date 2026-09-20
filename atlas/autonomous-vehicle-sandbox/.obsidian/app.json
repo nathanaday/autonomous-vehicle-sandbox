@@ -1,0 +1,9 @@
+{
+  "newLinkFormat": "shortest",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "wiki",
+  "userIgnoreFilters": [
+    ".raw/",
+    ".vault-meta/"
+  ]
+}

@@ -1,0 +1,62 @@
+/* claude-atlas: one color per place in a project, one color and icon per thread stage.
+   Written by claude-atlas; safe to replace with the next upgrade. Selectors carry
+   .nav-files-container so they win over an older vault-colors.css. */
+
+:root {
+  /* The wiki. */
+  --atlas-wiki: #4fc1ff;
+  --atlas-sources: #ce9178;
+  --atlas-entities: #c586c0;
+  --atlas-concepts: #dcdcaa;
+  --atlas-canvases: #b5cea8;
+
+  /* What flows in, and what nothing reads. */
+  --atlas-inbox: #e5c07b;
+  --atlas-ideas: #d7ba7d;
+
+  /* The thread stages, as callout colors. */
+  --atlas-thread: 197, 134, 192;
+  --atlas-stub: 229, 192, 123;
+  --atlas-spec: 79, 193, 255;
+  --atlas-plan: 78, 201, 176;
+  --atlas-receipt: 106, 153, 85;
+  --atlas-killed: 209, 105, 105;
+  --atlas-phase: 156, 220, 254;
+}
+
+/* The wiki: memory and the pages that cite their sources. */
+.nav-files-container .nav-folder-title[data-path="wiki"],
+.nav-files-container .nav-folder-title[data-path^="wiki/meta"],
+.nav-files-container .nav-folder-title[data-path^="wiki/mocs"]      { color: var(--atlas-wiki); }
+.nav-files-container .nav-folder-title[data-path^="wiki/sources"]   { color: var(--atlas-sources); }
+.nav-files-container .nav-folder-title[data-path^="wiki/entities"]  { color: var(--atlas-entities); }
+.nav-files-container .nav-folder-title[data-path^="wiki/concepts"],
+.nav-files-container .nav-folder-title[data-path^="wiki/notes"]     { color: var(--atlas-concepts); }
+.nav-files-container .nav-folder-title[data-path^="wiki/canvases"]  { color: var(--atlas-canvases); }
+
+/* The threads: the state of the work, one folder per stage. */
+.nav-files-container .nav-folder-title[data-path="threads"]         { color: rgb(var(--atlas-thread)); }
+.nav-files-container .nav-folder-title[data-path^="threads/stubs"]    { color: rgb(var(--atlas-stub)); }
+.nav-files-container .nav-folder-title[data-path^="threads/specs"]    { color: rgb(var(--atlas-spec)); }
+.nav-files-container .nav-folder-title[data-path^="threads/plans"]    { color: rgb(var(--atlas-plan)); }
+.nav-files-container .nav-folder-title[data-path^="threads/receipts"] { color: rgb(var(--atlas-receipt)); }
+.nav-files-container .nav-folder-title[data-path^="threads/phases"]   { color: rgb(var(--atlas-phase)); }
+
+/* What flows in. */
+.nav-files-container .nav-folder-title[data-path="inbox"]           { color: var(--atlas-inbox); }
+.nav-files-container .nav-folder-title[data-path="ideas"]           { color: var(--atlas-ideas); }
+
+/* The card at the top of every thread document, and the groups of the board. */
+.callout[data-callout='thread']  { --callout-color: var(--atlas-thread);  --callout-icon: lucide-git-branch; }
+.callout[data-callout='stub']    { --callout-color: var(--atlas-stub);    --callout-icon: lucide-sprout; }
+.callout[data-callout='spec']    { --callout-color: var(--atlas-spec);    --callout-icon: lucide-ruler; }
+.callout[data-callout='plan']    { --callout-color: var(--atlas-plan);    --callout-icon: lucide-map; }
+.callout[data-callout='receipt'] { --callout-color: var(--atlas-receipt); --callout-icon: lucide-check; }
+.callout[data-callout='killed']  { --callout-color: var(--atlas-killed);  --callout-icon: lucide-x; }
+.callout[data-callout='phase']   { --callout-color: var(--atlas-phase);   --callout-icon: lucide-flag; }
+
+/* Callouts the wiki pages use. */
+.callout[data-callout='contradiction'] { --callout-color: 209, 105, 105; --callout-icon: lucide-alert-triangle; }
+.callout[data-callout='gap']           { --callout-color: 220, 220, 170; --callout-icon: lucide-help-circle; }
+.callout[data-callout='key-insight']   { --callout-color: 79, 193, 255;  --callout-icon: lucide-lightbulb; }
+.callout[data-callout='stale']         { --callout-color: 128, 128, 128; --callout-icon: lucide-clock; }
