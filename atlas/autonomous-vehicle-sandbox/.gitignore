@@ -1,0 +1,9 @@
+# claude-atlas runtime state: lock, in-flight operation, plans. Safe to delete.
+.vault-meta/
+
+# Obsidian and operating-system session state.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.trash/
+.DS_Store
+Thumbs.db
