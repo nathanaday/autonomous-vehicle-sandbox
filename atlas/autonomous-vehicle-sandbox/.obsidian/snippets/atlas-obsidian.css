@@ -1,5 +1,5 @@
-/* claude-atlas: one color per place in a project, one color and icon per thread stage.
-   Written by claude-atlas; safe to replace with the next upgrade. Selectors carry
+/* atlas-obsidian: one color per place in a project, one color and icon per thread stage.
+   Written by atlas-obsidian; safe to replace with the next upgrade. Selectors carry
    .nav-files-container so they win over an older vault-colors.css. */
 
 :root {
